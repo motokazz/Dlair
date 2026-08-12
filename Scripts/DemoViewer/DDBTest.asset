@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84f507671e0982048b6886fbb93b3bbd, type: 3}
+  m_Name: DDBTest
+  m_EditorClassIdentifier: Assembly-CSharp::DemoDatabaseSO
+  demoList:
+  - demoID: 1
+    title: 1
+    thumbnail: {fileID: -565387194, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: bfc88f1c9a4ea2246837e954e71f5232, type: 3}
+  - demoID: 2
+    title: 2
+    thumbnail: {fileID: 477315966, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: 7285de34a2727d24cb8313b083cdeef6, type: 3}
+  - demoID: 3
+    title: 3
+    thumbnail: {fileID: -1644399467, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: accc532b53bb2dd40ab420a4065db0c5, type: 3}
+  - demoID: 4
+    title: 4
+    thumbnail: {fileID: 814787935, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: accc532b53bb2dd40ab420a4065db0c5, type: 3}
+  - demoID: 5
+    title: 5
+    thumbnail: {fileID: -518928509, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: e53fa5eb5db0cb748b60c215bdd5aa78, type: 3}
+  - demoID: 6
+    title: 6
+    thumbnail: {fileID: 464472165, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: e53fa5eb5db0cb748b60c215bdd5aa78, type: 3}
+  - demoID: 7
+    title: 7
+    thumbnail: {fileID: -1832568873, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: a08a73e2316a4b242a33c0f49e7ddfca, type: 3}
+  - demoID: 8
+    title: 8
+    thumbnail: {fileID: -63444845, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: a08a73e2316a4b242a33c0f49e7ddfca, type: 3}
+  - demoID: 
+    title: 
+    thumbnail: {fileID: -565387194, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: a08a73e2316a4b242a33c0f49e7ddfca, type: 3}
+  - demoID: 
+    title: 
+    thumbnail: {fileID: -565387194, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: bfc88f1c9a4ea2246837e954e71f5232, type: 3}
+  - demoID: 11
+    title: 11
+    thumbnail: {fileID: -967606054, guid: ce49228e8bc099949ab9fcb2f0995477, type: 3}
+    videoClip: {fileID: 32900000, guid: 7285de34a2727d24cb8313b083cdeef6, type: 3}
