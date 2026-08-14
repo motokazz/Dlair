@@ -1,13 +1,23 @@
-using System.Collections;
+Ôªøusing System.Collections;
 using UnityEngine;
 using UnityEngine.Video;
-using UnityEngine.InputSystem;
 
 public class DualVideoPlayer : MonoBehaviour
 {
+    public enum AspectMode
+    {
+        Stretch,
+        FitInside,
+        FitOutside
+    }
+
     [Header("Video Players")]
     public VideoPlayer playerA;
     public VideoPlayer playerB;
+
+    [Header("Audio Sources")]
+    public AudioSource audioSourceA;
+    public AudioSource audioSourceB;
 
     [Header("Render Textures")]
     public RenderTexture texA;
@@ -16,106 +26,269 @@ public class DualVideoPlayer : MonoBehaviour
     [Header("Transition Material")]
     public Material transitionMaterial;
 
-    [Header("Test Clips")]
-    public VideoClip firstClip;
-    public VideoClip secondClip;
-
     [Header("Settings")]
     public float transitionDuration = 1.0f;
+    public AspectMode aspectMode = AspectMode.FitOutside;
 
-    private bool isPlayerA_Active = true;
-    private bool isTransitioning = false;
+    public bool isPlayerA_Active = true;
+    public bool IsTransitioning { get; private set; } = false;
 
-    // Åö èdï°é¿çsÇñhÇÆÇΩÇﬂÇÃèdóvÇ»ÉçÉbÉNÉtÉâÉO
-    private bool isWaitingForFirstFrame = false;
-    private bool triggerTransitionRequested = false;
+    private Material glMaterial;
+
+    private AudioSource bgmSource1;
+    private AudioSource bgmSource2;
+    private AudioSource currentBgmSource;
 
     private void Start()
     {
-        ConfigurePlayerEvents(playerA);
-        ConfigurePlayerEvents(playerB);
+        if (audioSourceA != null)
+        {
+            playerA.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            playerA.EnableAudioTrack(0, true);
+            playerA.SetTargetAudioSource(0, audioSourceA);
+        }
+        if (audioSourceB != null)
+        {
+            playerB.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            playerB.EnableAudioTrack(0, true);
+            playerB.SetTargetAudioSource(0, audioSourceB);
+        }
 
-        // ÉeÉNÉXÉ`ÉÉÇÃäÑÇËìñÇƒÇÕÅuâiâìÇ…å≈íËÅvÅBA=Main, B=Sub
+        bgmSource1 = gameObject.AddComponent<AudioSource>();
+        bgmSource1.playOnAwake = false;
+        bgmSource2 = gameObject.AddComponent<AudioSource>();
+        bgmSource2.playOnAwake = false;
+        currentBgmSource = bgmSource1;
+
+        VideoAspectRatio ratio = VideoAspectRatio.Stretch;
+        if (aspectMode == AspectMode.FitInside) ratio = VideoAspectRatio.FitInside;
+        else if (aspectMode == AspectMode.FitOutside) ratio = VideoAspectRatio.FitOutside;
+
+        playerA.aspectRatio = ratio;
+        playerB.aspectRatio = ratio;
+
+        Shader shader = Shader.Find("UI/Default");
+        if (shader != null) glMaterial = new Material(shader);
+
+        ClearRenderTexture(texA);
+        ClearRenderTexture(texB);
+        isPlayerA_Active = true;
         transitionMaterial.SetTexture("_MainTex", texA);
         transitionMaterial.SetTexture("_SubTex", texB);
-        // 0.0 ÇÕ AÇÃâfëúÇï\é¶Ç∑ÇÈèÛë‘
-        transitionMaterial.SetFloat("_Transition", 0f);
+        transitionMaterial.SetFloat("_Transition", 1f);
+    }
 
-        if (firstClip != null)
+    private void ClearRenderTexture(RenderTexture rt)
+    {
+        if (rt == null) return;
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture.active = rt;
+        GL.Clear(true, true, Color.black);
+        RenderTexture.active = previous;
+    }
+
+    private void DrawImageToRenderTexture(Texture2D image, RenderTexture targetRT)
+    {
+        if (image == null || targetRT == null) return;
+
+        if (aspectMode == AspectMode.Stretch)
         {
-            playerA.clip = firstClip;
-            playerA.Play();
+            Graphics.Blit(image, targetRT);
+            return;
         }
-    }
 
-    private void ConfigurePlayerEvents(VideoPlayer player)
-    {
-        player.sendFrameReadyEvents = true;
-        player.prepareCompleted += OnVideoPrepared;
-        player.frameReady += OnFrameReady;
-    }
+        if (glMaterial == null) return;
 
-    private void Update()
-    {
-        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+        float srcAspect = (float)image.width / image.height;
+        float dstAspect = (float)targetRT.width / targetRT.height;
+
+        float w = 1.0f;
+        float h = 1.0f;
+
+        if (aspectMode == AspectMode.FitInside)
         {
-            if (!isTransitioning && secondClip != null)
+            if (srcAspect > dstAspect) h = dstAspect / srcAspect;
+            else w = srcAspect / dstAspect;
+        }
+        else if (aspectMode == AspectMode.FitOutside)
+        {
+            if (srcAspect > dstAspect) w = srcAspect / dstAspect;
+            else h = dstAspect / srcAspect;
+        }
+
+        float x = (1.0f - w) * 0.5f;
+        float y = (1.0f - h) * 0.5f;
+
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture.active = targetRT;
+
+        GL.PushMatrix();
+        GL.LoadOrtho();
+
+        glMaterial.mainTexture = image;
+        glMaterial.SetPass(0);
+
+        GL.Begin(GL.QUADS);
+        GL.TexCoord2(0, 0); GL.Vertex3(x, y, 0);
+        GL.TexCoord2(0, 1); GL.Vertex3(x, y + h, 0);
+        GL.TexCoord2(1, 1); GL.Vertex3(x + w, y + h, 0);
+        GL.TexCoord2(1, 0); GL.Vertex3(x + w, y, 0);
+        GL.End();
+
+        GL.PopMatrix();
+        RenderTexture.active = previous;
+    }
+
+    public IEnumerator WarmUpDecoder(VideoClip dummyClip)
+    {
+        IsTransitioning = true;
+        transitionMaterial.SetFloat("_GlobalAlpha", 0f);
+
+        playerA.isLooping = false;
+        playerA.clip = dummyClip;
+        playerA.Prepare();
+        while (!playerA.isPrepared) yield return null;
+
+        playerA.Play();
+        yield return new WaitForSeconds(0.5f);
+        playerA.Stop();
+
+        bgmSource1.Stop();
+        bgmSource2.Stop();
+
+        ClearRenderTexture(texA);
+        ClearRenderTexture(texB);
+
+        isPlayerA_Active = false;
+        transitionMaterial.SetFloat("_Transition", 1f);
+        IsTransitioning = false;
+    }
+
+    public void PlayFirstMedia(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip bgmClip)
+    {
+        if (IsTransitioning) return;
+        StartCoroutine(PlayFirstMediaRoutine(isStaticImage, clip, image, isLooping, bgmClip));
+    }
+
+    private IEnumerator PlayFirstMediaRoutine(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip bgmClip)
+    {
+        IsTransitioning = true;
+        isPlayerA_Active = true;
+
+        ClearRenderTexture(texA);
+        ClearRenderTexture(texB);
+
+        transitionMaterial.SetTexture("_SubTex", texB);
+        transitionMaterial.SetFloat("_Transition", 1f);
+
+        currentBgmSource.Stop();
+        if (bgmClip != null)
+        {
+            currentBgmSource.clip = bgmClip;
+            currentBgmSource.loop = isLooping;
+            currentBgmSource.volume = 1f;
+            currentBgmSource.Play();
+        }
+
+        if (isStaticImage)
+        {
+            playerA.Stop();
+            DrawImageToRenderTexture(image, texA);
+            yield return null;
+        }
+        else
+        {
+            playerA.isLooping = isLooping;
+            playerA.clip = clip;
+            playerA.Prepare();
+            while (!playerA.isPrepared) yield return null;
+
+            playerA.Play();
+            yield return WaitAndPreRender(playerA, texA);
+        }
+
+        float time = 0;
+        float fadeInDuration = 0.5f;
+
+        while (time < fadeInDuration)
+        {
+            time += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(time / fadeInDuration);
+            float currentValue = Mathf.Lerp(1f, 0f, t);
+            transitionMaterial.SetFloat("_Transition", currentValue);
+
+            float currentAlpha = transitionMaterial.GetFloat("_GlobalAlpha");
+            if (currentAlpha < 1.0f)
             {
-                RequestPlayNextVideo(secondClip);
+                transitionMaterial.SetFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
+            }
+            yield return null;
+        }
+
+        transitionMaterial.SetFloat("_Transition", 0f);
+        transitionMaterial.SetFloat("_GlobalAlpha", 1.0f);
+        IsTransitioning = false;
+    }
+
+    public void RequestPlayNextMedia(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm)
+    {
+        if (IsTransitioning) return;
+        StartCoroutine(TransitionRoutine(isStaticImage, nextClip, nextImage, isLooping, nextBgm));
+    }
+
+    private IEnumerator TransitionRoutine(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm)
+    {
+        IsTransitioning = true;
+
+        VideoPlayer activePlayer = isPlayerA_Active ? playerA : playerB;
+        VideoPlayer nextPlayer = isPlayerA_Active ? playerB : playerA;
+        RenderTexture targetRT = isPlayerA_Active ? texB : texA;
+
+        activePlayer.isLooping = false;
+        ClearRenderTexture(targetRT);
+
+        bool keepSameBgm = (currentBgmSource.isPlaying && nextBgm != null && currentBgmSource.clip == nextBgm);
+
+        AudioSource fadingOutBgmSource = null;
+        AudioSource fadingInBgmSource = null;
+
+        if (keepSameBgm)
+        {
+            currentBgmSource.loop = isLooping;
+        }
+        else
+        {
+            fadingOutBgmSource = currentBgmSource;
+            fadingInBgmSource = (currentBgmSource == bgmSource1) ? bgmSource2 : bgmSource1;
+
+            fadingInBgmSource.Stop();
+            if (nextBgm != null)
+            {
+                fadingInBgmSource.clip = nextBgm;
+                fadingInBgmSource.loop = isLooping;
+                fadingInBgmSource.volume = 0f;
+                fadingInBgmSource.Play();
             }
         }
 
-        // ÉÅÉCÉìÉXÉåÉbÉh(Update)Ç≈1âÒÇæÇØÉRÉãÅ[É`ÉìÇãNìÆÇ∑ÇÈ
-        if (triggerTransitionRequested)
+        if (isStaticImage)
         {
-            triggerTransitionRequested = false;
-            StartCoroutine(TransitionRoutine());
+            nextPlayer.Stop();
+            DrawImageToRenderTexture(nextImage, targetRT);
+            yield return null;
         }
-    }
-
-    public void RequestPlayNextVideo(VideoClip nextClip)
-    {
-        isTransitioning = true;
-        isWaitingForFirstFrame = true; // Åö éüÇÃâfëúÇÃèÄîıë“ÇøÇäJén
-
-        VideoPlayer nextPlayer = isPlayerA_Active ? playerB : playerA;
-
-        // ÉSÉ~ÉtÉåÅ[ÉÄÇ™écÇÁÇ»Ç¢ÇÊÇ§Ç…çïÇ≈ìhÇËÇ¬Ç‘Ç∑
-        RenderTexture targetRT = isPlayerA_Active ? texB : texA;
-        Graphics.Blit(Texture2D.blackTexture, targetRT);
-
-        nextPlayer.clip = nextClip;
-        nextPlayer.Prepare();
-    }
-
-    private void OnVideoPrepared(VideoPlayer source)
-    {
-        source.Play();
-        source.Pause();
-    }
-
-    private void OnFrameReady(VideoPlayer source, long frameIdx)
-    {
-        VideoPlayer nextPlayer = isPlayerA_Active ? playerB : playerA;
-
-        // Åö Åuç≈èâÇÃÉtÉåÅ[ÉÄë“ÇøèÛë‘ÅvÇÃÇ∆Ç´ÅA1âÒÇæÇØÇµÇ©Ç±Ç±Çí Ç≥Ç»Ç¢
-        if (isWaitingForFirstFrame && source == nextPlayer && frameIdx >= 0)
+        else
         {
-            isWaitingForFirstFrame = false; // Åö ë¶ç¿Ç…ÉçÉbÉNÇï¬Ç∂ÇÈ
-            triggerTransitionRequested = true; // UpdateÇ…äJénÇàÀóä
+            nextPlayer.isLooping = isLooping;
+            nextPlayer.clip = nextClip;
+            nextPlayer.Prepare();
+            while (!nextPlayer.isPrepared) yield return null;
+
+            nextPlayer.Play();
+            yield return WaitAndPreRender(nextPlayer, targetRT);
         }
-    }
-
-    private IEnumerator TransitionRoutine()
-    {
-        VideoPlayer activePlayer = isPlayerA_Active ? playerA : playerB;
-        VideoPlayer nextPlayer = isPlayerA_Active ? playerB : playerA;
-
-        nextPlayer.Play();
 
         float time = 0;
-
-        // Åö Ping-Pongï˚éÆ: A->BÇ÷ÇÃëJà⁄Ç»ÇÁ 0->1ÅAB->AÇ÷ÇÃëJà⁄Ç»ÇÁ 1->0 Ç…ìÆÇ©Ç∑
         float startValue = isPlayerA_Active ? 0f : 1f;
         float endValue = isPlayerA_Active ? 1f : 0f;
 
@@ -126,26 +299,70 @@ public class DualVideoPlayer : MonoBehaviour
 
             float currentValue = Mathf.Lerp(startValue, endValue, t);
             transitionMaterial.SetFloat("_Transition", currentValue);
+
+            float currentAlpha = transitionMaterial.GetFloat("_GlobalAlpha");
+            if (currentAlpha < 1.0f)
+            {
+                transitionMaterial.SetFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
+            }
+
+            if (!keepSameBgm)
+            {
+                if (nextBgm != null) fadingInBgmSource.volume = t;
+                if (fadingOutBgmSource.isPlaying) fadingOutBgmSource.volume = 1f - t;
+            }
+
             yield return null;
         }
 
-        // ämé¿Ç…ñ⁄ïWílÇ…íÖínÇ≥ÇπÇÈ
         transitionMaterial.SetFloat("_Transition", endValue);
+        transitionMaterial.SetFloat("_GlobalAlpha", 1.0f);
 
-        // å√Ç¢ìÆâÊÇí‚é~
+        if (!keepSameBgm)
+        {
+            if (nextBgm != null) fadingInBgmSource.volume = 1f;
+            fadingOutBgmSource.Stop();
+            currentBgmSource = fadingInBgmSource;
+        }
+
         activePlayer.Stop();
-
-        // ÉAÉNÉeÉBÉuèÛë‘ÇîΩì]
         isPlayerA_Active = !isPlayerA_Active;
-        isTransitioning = false;
-
-        // Åö ÉgÉâÉìÉWÉVÉáÉìäÆóπå„ÅAÉeÉNÉXÉ`ÉÉÇÃì¸ÇÍë÷Ç¶ìôÇÃÉäÉZÉbÉgèàóùÇÕÅuàÍêÿïsóvÅvÅB
-        // éüâÒÇÕ 1->0 ÅiÇ‹ÇΩÇÕ 0->1ÅjÇ…å¸Ç©Ç¡Çƒ Transition ílÇ™ìÆÇ≠ÇæÇØÇ»ÇÃÇ≈É`ÉâÇ¬Ç´Ç‹ÇπÇÒÅB
+        IsTransitioning = false;
     }
 
-    private void OnDestroy()
+    private IEnumerator WaitAndPreRender(VideoPlayer player, RenderTexture rt)
     {
-        if (playerA != null) { playerA.prepareCompleted -= OnVideoPrepared; playerA.frameReady -= OnFrameReady; }
-        if (playerB != null) { playerB.prepareCompleted -= OnVideoPrepared; playerB.frameReady -= OnFrameReady; }
+        yield return null;
+        yield return null;
+        yield return null;
+
+        float timeout = 1.0f;
+        float timer = 0f;
+        while (player.time <= 0.05f && timer < timeout)
+        {
+            timer += Time.unscaledDeltaTime;
+            yield return null;
+        }
+    }
+
+    public VideoPlayer GetActivePlayer()
+    {
+        return isPlayerA_Active ? playerA : playerB;
+    }
+
+    // ==========================================
+    // ‚òÖËøΩÂä†Ôºö„Ç§„É≥„Çø„É©„ÇØ„ÉÜ„Ç£„ÉñÂàÜÂ≤êÂæÖÊ©üÁî®„ÅÆ„É´„Éº„ÉóÂº∑Âà∂Ë®≠ÂÆö„É°„ÇΩ„ÉÉ„Éâ
+    // ==========================================
+    public void SetWaitMode(bool waitLoop)
+    {
+        VideoPlayer activePlayer = isPlayerA_Active ? playerA : playerB;
+        if (activePlayer != null)
+        {
+            activePlayer.isLooping = waitLoop;
+        }
+        if (currentBgmSource != null)
+        {
+            currentBgmSource.loop = waitLoop;
+        }
     }
 }
