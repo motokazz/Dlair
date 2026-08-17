@@ -1,0 +1,72 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9fc20fbee696c7c4bb1d7da2b0024772, type: 3}
+  m_Name: NewMediaPlaylist 1
+  m_EditorClassIdentifier: Assembly-CSharp::MediaPlaylist
+  defaultCrossfadeDuration: 1
+  items:
+  - title: a
+    thumbnail: {fileID: 0}
+    isStaticImage: 0
+    clip: {fileID: 32900000, guid: 6512bc2a768bdcb47a40734c05efce9b, type: 3}
+    image: {fileID: 0}
+    imageDuration: 0
+    audioClip: {fileID: 8300000, guid: 1895b8e6a3596b249b76d059613e6030, type: 3}
+    isLooping: 1
+    isUnlockedByDefault: 0
+    unlockId: 
+    overrideCrossfade: 0
+    customCrossfadeDuration: 0
+    eventId: ChoicesController
+    eventTriggerTime: 1
+    eventParameter: Stretching out the stockings
+    choices:
+    - branchKey: a
+      targetId: a
+    - branchKey: b
+      targetId: b
+  - title: b
+    thumbnail: {fileID: 0}
+    isStaticImage: 0
+    clip: {fileID: 32900000, guid: f0fc2da6dc9ccab40891a175d7e6216a, type: 3}
+    image: {fileID: 0}
+    imageDuration: 0
+    audioClip: {fileID: 0}
+    isLooping: 0
+    isUnlockedByDefault: 0
+    unlockId: 
+    overrideCrossfade: 0
+    customCrossfadeDuration: 0
+    eventId: MessageController
+    eventTriggerTime: 3
+    eventParameter: Stretching out the stockings
+    choices:
+    - branchKey: c
+      targetId: c
+  - title: c
+    thumbnail: {fileID: 0}
+    isStaticImage: 0
+    clip: {fileID: 32900000, guid: b6d22a1b75108a349803353127d457bc, type: 3}
+    image: {fileID: 0}
+    imageDuration: 0
+    audioClip: {fileID: 8300000, guid: fcc59db15ea6da946a2ff802aaf48b21, type: 3}
+    isLooping: 1
+    isUnlockedByDefault: 0
+    unlockId: 
+    overrideCrossfade: 0
+    customCrossfadeDuration: 0
+    eventId: TapGameController
+    eventTriggerTime: 1
+    eventParameter: Stretching out the stockings
+    choices:
+    - branchKey: a
+      targetId: a

@@ -27,7 +27,7 @@ public class DualVideoPlayer : MonoBehaviour
     public Material transitionMaterial;
 
     [Header("Settings")]
-    public float transitionDuration = 1.0f;
+    // ★削除: かぶっていた transitionDuration を削除し、設定を一本化
     public AspectMode aspectMode = AspectMode.FitOutside;
 
     public bool isPlayerA_Active = true;
@@ -230,13 +230,19 @@ public class DualVideoPlayer : MonoBehaviour
         IsTransitioning = false;
     }
 
-    public void RequestPlayNextMedia(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm)
+    // ==========================================
+    // ★ 変更：引数にフェード時間 (fadeDuration) を追加
+    // ==========================================
+    public void RequestPlayNextMedia(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm, float fadeDuration)
     {
         if (IsTransitioning) return;
-        StartCoroutine(TransitionRoutine(isStaticImage, nextClip, nextImage, isLooping, nextBgm));
+        StartCoroutine(TransitionRoutine(isStaticImage, nextClip, nextImage, isLooping, nextBgm, fadeDuration));
     }
 
-    private IEnumerator TransitionRoutine(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm)
+    // ==========================================
+    // ★ 変更：引数にフェード時間 (fadeDuration) を追加
+    // ==========================================
+    private IEnumerator TransitionRoutine(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm, float fadeDuration)
     {
         IsTransitioning = true;
 
@@ -292,10 +298,14 @@ public class DualVideoPlayer : MonoBehaviour
         float startValue = isPlayerA_Active ? 0f : 1f;
         float endValue = isPlayerA_Active ? 1f : 0f;
 
-        while (time < transitionDuration)
+        // ==========================================
+        // ★ 変更：受け取った fadeDuration でアニメーション
+        // ==========================================
+        while (time < fadeDuration)
         {
             time += Time.unscaledDeltaTime;
-            float t = Mathf.Clamp01(time / transitionDuration);
+            // 0除算エラー回避のため、fadeDurationが0より大きい場合のみ計算
+            float t = (fadeDuration > 0f) ? Mathf.Clamp01(time / fadeDuration) : 1f;
 
             float currentValue = Mathf.Lerp(startValue, endValue, t);
             transitionMaterial.SetFloat("_Transition", currentValue);
@@ -350,9 +360,6 @@ public class DualVideoPlayer : MonoBehaviour
         return isPlayerA_Active ? playerA : playerB;
     }
 
-    // ==========================================
-    // ★追加：インタラクティブ分岐待機用のループ強制設定メソッド
-    // ==========================================
     public void SetWaitMode(bool waitLoop)
     {
         VideoPlayer activePlayer = isPlayerA_Active ? playerA : playerB;

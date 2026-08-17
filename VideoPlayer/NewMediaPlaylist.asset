@@ -12,21 +12,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9fc20fbee696c7c4bb1d7da2b0024772, type: 3}
   m_Name: NewMediaPlaylist
   m_EditorClassIdentifier: Assembly-CSharp::MediaPlaylist
+  defaultCrossfadeDuration: 1
   items:
   - title: a
     thumbnail: {fileID: 0}
     isStaticImage: 1
     clip: {fileID: 32900000, guid: bc7b99da1526e5844974e5046d49387b, type: 3}
     image: {fileID: 2800000, guid: 8b3c253fbe9dac045a375c25c64695a9, type: 3}
-    imageDuration: 5
+    imageDuration: 1
     audioClip: {fileID: 8300000, guid: fcc59db15ea6da946a2ff802aaf48b21, type: 3}
     isLooping: 1
     isUnlockedByDefault: 1
     unlockId: 
+    overrideCrossfade: 1
+    customCrossfadeDuration: 0
+    eventId: AutoBranchController
+    eventParameter: 
     choices:
-    - buttonText: aaa
+    - branchKey: quiz
       targetId: b
-    - buttonText: bbb
+    - branchKey: tap
       targetId: c
     loopWhileWaiting: 1
   - title: b
@@ -34,12 +39,20 @@ MonoBehaviour:
     isStaticImage: 1
     clip: {fileID: 32900000, guid: 6ea07adf7e1500b48b5dcef48bc7ec5d, type: 3}
     image: {fileID: 2800000, guid: 72ddaad5243e76a43837623c020488e5, type: 3}
-    imageDuration: 5
+    imageDuration: 1
     audioClip: {fileID: 8300000, guid: fcc59db15ea6da946a2ff802aaf48b21, type: 3}
     isLooping: 1
     isUnlockedByDefault: 1
     unlockId: 
-    choices: []
+    overrideCrossfade: 0
+    customCrossfadeDuration: 1
+    eventId: None
+    eventParameter: 0.1
+    choices:
+    - branchKey: Clear
+      targetId: a
+    - branchKey: Clear
+      targetId: c
     loopWhileWaiting: 1
   - title: c
     thumbnail: {fileID: 0}
@@ -51,5 +64,13 @@ MonoBehaviour:
     isLooping: 1
     isUnlockedByDefault: 0
     unlockId: 
-    choices: []
+    overrideCrossfade: 0
+    customCrossfadeDuration: 1
+    eventId: None
+    eventParameter: 
+    choices:
+    - branchKey: "\u5206\u5C90\u540D \u307E\u305F\u306F \u30AD\u30FC"
+      targetId: a
+    - branchKey: "\u5206\u5C90\u540D \u307E\u305F\u306F \u30AD\u30FC"
+      targetId: b
     loopWhileWaiting: 1
