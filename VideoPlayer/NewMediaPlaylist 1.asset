@@ -17,12 +17,12 @@ MonoBehaviour:
   - title: a
     thumbnail: {fileID: 0}
     isStaticImage: 0
-    clip: {fileID: 32900000, guid: 6512bc2a768bdcb47a40734c05efce9b, type: 3}
+    clip: {fileID: 32900000, guid: c70d2ea01b9e045419b8c71b0957b348, type: 3}
     image: {fileID: 0}
     imageDuration: 0
-    audioClip: {fileID: 8300000, guid: 1895b8e6a3596b249b76d059613e6030, type: 3}
+    audioClip: {fileID: 0}
     isLooping: 1
-    isUnlockedByDefault: 0
+    isUnlockedByDefault: 1
     unlockId: 
     overrideCrossfade: 0
     customCrossfadeDuration: 0
@@ -37,16 +37,16 @@ MonoBehaviour:
   - title: b
     thumbnail: {fileID: 0}
     isStaticImage: 0
-    clip: {fileID: 32900000, guid: f0fc2da6dc9ccab40891a175d7e6216a, type: 3}
+    clip: {fileID: 32900000, guid: dfcbb31febbe3974797185c948e65c02, type: 3}
     image: {fileID: 0}
     imageDuration: 0
     audioClip: {fileID: 0}
-    isLooping: 0
-    isUnlockedByDefault: 0
-    unlockId: 
+    isLooping: 1
+    isUnlockedByDefault: 1
+    unlockId: b
     overrideCrossfade: 0
     customCrossfadeDuration: 0
-    eventId: MessageController
+    eventId: ChoicesController
     eventTriggerTime: 3
     eventParameter: Stretching out the stockings
     choices:
@@ -55,16 +55,16 @@ MonoBehaviour:
   - title: c
     thumbnail: {fileID: 0}
     isStaticImage: 0
-    clip: {fileID: 32900000, guid: b6d22a1b75108a349803353127d457bc, type: 3}
+    clip: {fileID: 32900000, guid: 0c171f1e4d553454dab41e91f0410078, type: 3}
     image: {fileID: 0}
     imageDuration: 0
-    audioClip: {fileID: 8300000, guid: fcc59db15ea6da946a2ff802aaf48b21, type: 3}
+    audioClip: {fileID: 0}
     isLooping: 1
-    isUnlockedByDefault: 0
-    unlockId: 
+    isUnlockedByDefault: 1
+    unlockId: c
     overrideCrossfade: 0
     customCrossfadeDuration: 0
-    eventId: TapGameController
+    eventId: ChoicesController
     eventTriggerTime: 1
     eventParameter: Stretching out the stockings
     choices:

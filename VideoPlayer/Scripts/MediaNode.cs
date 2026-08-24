@@ -3,25 +3,27 @@ using UnityEngine.Video;
 using XNode;
 using System.Collections.Generic;
 
-// これを付けると、ノードを作るメニューに表示されます
+// ==========================================
+// ★修正：using は必ず一番上に書く！
+// ==========================================
+#if UNITY_EDITOR
+using UnityEditor;
+using System.Linq;
+#endif
+
+public class MiniGameSelectorAttribute : PropertyAttribute { }
+
 [CreateNodeMenu("Media/Video Node")]
 public class MediaNode : Node
 {
-    // ★ノードを繋ぐ「線」のためのダミー型（見た目用）
     [System.Serializable] public struct Flow { }
 
-    // ==========================================
-    // 入出力ポート（ここから線を引っ張る！）
-    // ==========================================
     [Input(ShowBackingValue.Never, ConnectionType.Multiple)]
-    public Flow enter; // 前の動画から入ってくる線
+    public Flow enter;
 
     [Output(ShowBackingValue.Never, ConnectionType.Override)]
-    public Flow next;  // 次の動画へ向かう線（通常遷移）
+    public Flow next;
 
-    // ==========================================
-    // 今まで通りの動画データ
-    // ==========================================
     public string title = "New Media";
     public Sprite thumbnail;
     public bool isStaticImage;
@@ -36,32 +38,26 @@ public class MediaNode : Node
     public float customCrossfadeDuration = 1.0f;
 
     [Header("Interactive Event")]
+    [MiniGameSelector]
     public string eventId = "None";
+
     public float eventTriggerTime = 0f;
     public string eventParameter;
 
-    // ==========================================
-    // ★大進化：Choices（分岐ボタン）
-    // targetId（文字）を廃止し、ノードの線を直接出せるようにする設定！
-    // ==========================================
     [System.Serializable]
     public class BranchChoice
     {
         public string branchKey = "Button Text";
     }
 
-    [Output(dynamicPortList = true)] // リストの数だけ「出力ポート（丸ポッチ）」が自動で増える魔法の設定！
+    [Output(dynamicPortList = true)]
     public List<BranchChoice> choices = new List<BranchChoice>();
 
-    // ==========================================
-    // xNode必須のメソッド（値を渡すグラフではないので null を返すだけでOK）
-    // ==========================================
     public override object GetValue(NodePort port)
     {
         return null;
     }
 
-    // 次のノード（通常再生）を取得する便利メソッド
     public MediaNode GetNextNode()
     {
         NodePort port = GetOutputPort("next");
@@ -69,7 +65,6 @@ public class MediaNode : Node
         return null;
     }
 
-    // 指定した分岐先のノードを取得する便利メソッド
     public MediaNode GetBranchTarget(int index)
     {
         NodePort port = GetOutputPort("choices " + index);
@@ -77,3 +72,42 @@ public class MediaNode : Node
         return null;
     }
 }
+
+// ==========================================
+// エディタ拡張部分（usingは一番上に移動済み）
+// ==========================================
+#if UNITY_EDITOR
+[CustomPropertyDrawer(typeof(MiniGameSelectorAttribute))]
+public class MiniGameSelectorDrawer : PropertyDrawer
+{
+    private static string[] eventOptions;
+
+    private static void CacheEventOptions()
+    {
+        if (eventOptions != null) return;
+        var interfaceType = typeof(IMiniGame);
+
+        var miniGameTypes = System.AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(s => s.GetTypes())
+            .Where(p => interfaceType.IsAssignableFrom(p) && !p.IsInterface && !p.IsAbstract)
+            .Select(t => t.Name)
+            .ToList();
+
+        var list = new List<string>();
+        list.Add("None");
+        list.AddRange(miniGameTypes);
+        eventOptions = list.ToArray();
+    }
+
+    public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+    {
+        CacheEventOptions();
+
+        int selectedIndex = System.Array.IndexOf(eventOptions, property.stringValue);
+        if (selectedIndex < 0) selectedIndex = 0;
+
+        selectedIndex = EditorGUI.Popup(position, label.text, selectedIndex, eventOptions);
+        property.stringValue = eventOptions[selectedIndex];
+    }
+}
+#endif
