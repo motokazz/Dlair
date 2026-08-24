@@ -1,144 +1,179 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.Video;
-using UnityEngine.Events;
-using System.Collections;
+using TMPro;
 
 public class VideoSelector : MonoBehaviour
 {
-    public enum PlaybackMode { Normal, Interactive, Manual }
-
-    [Header("Node Graph")]
-    public MediaGraph mediaGraph; // ★プレイリストではなくグラフ！
+    [Header("Graph")]
+    public StoryGraph storyGraph;
 
     [Header("References")]
     public DualVideoPlayer dualPlayer;
     public VideoClip dummyClip;
 
-    [Header("Events")]
-    public UnityEvent<MediaNode> onCustomEventTriggered; // ★MediaNodeに変更
+    [Header("UI (Branch Node)")]
+    public GameObject choicesPanel;
+    public Transform buttonContainer;
+    public GameObject buttonPrefab;
+    public TypewriterEffect typewriter;
 
-    private MediaNode currentNode; // ★現在のノードを記憶
-    private PlaybackMode currentMode = PlaybackMode.Normal;
+    private BaseStoryNode currentNode;
     private Coroutine monitorCoroutine;
+    private List<GameObject> spawnedButtons = new List<GameObject>();
+    private bool isFirstPlay = true;
+
+    // ★追加：帰り道を覚えておくための「スタック（しおりのようなもの）」
+    private Stack<BaseStoryNode> returnStack = new Stack<BaseStoryNode>();
 
     private void Start()
     {
-        // ==========================================
-        // ★修正：エラーを分かりやすくし、Start Nodeを自動で探す親切設計に
-        // ==========================================
-        if (mediaGraph == null)
+        if (storyGraph == null)
         {
-            Debug.LogError("【エラー】VideoSelectorに『Media Graph』がセットされていません！インスペクターでグラフをアタッチしてください。");
+            Debug.LogError("【エラー】Story Graphがセットされていません！");
             return;
         }
 
-        // Start Nodeが設定されていない場合の自動修復
-        if (mediaGraph.startNode == null)
+        // ==========================================
+        // ★変更：グラフ内から「StartNode」を自動で探し出す！
+        // ==========================================
+        BaseStoryNode firstNode = null;
+        foreach (var node in storyGraph.nodes)
         {
-            foreach (var node in mediaGraph.nodes)
+            if (node is StartNode startNode)
             {
-                if (node is MediaNode mediaNode)
+                firstNode = startNode;
+                break;
+            }
+        }
+
+        if (firstNode == null)
+        {
+            Debug.LogError("【エラー】グラフの中に『Start Node』が見つかりません！右クリックから作成してください。");
+            return;
+        }
+
+        if (choicesPanel != null) choicesPanel.SetActive(false);
+
+        if (dummyClip != null)
+        {
+            isFirstPlay = false;
+            // 起動シーケンスへStartNodeを渡す
+            StartCoroutine(StartupSequence(firstNode));
+        }
+        else
+        {
+            isFirstPlay = true;
+            ExecuteNode(firstNode);
+        }
+    }
+
+    // StartupSequence も引数を受け取るように少し修正します
+    private IEnumerator StartupSequence(BaseStoryNode firstNode)
+    {
+        yield return dualPlayer.WarmUpDecoder(dummyClip);
+        ExecuteNode(firstNode);
+    }
+
+
+    // ==========================================
+    // ★大進化：ノードの実行（サブグラフから戻る機能を搭載）
+    // ==========================================
+    public void ExecuteNode(BaseStoryNode node)
+    {
+        if (node == null)
+        {
+            // ★変更：次に進むノードが無い場合、しおり（帰り道）が挟まっていればそこに戻る！
+            if (returnStack.Count > 0)
+            {
+                BaseStoryNode returnNode = returnStack.Pop();
+                if (returnNode != null)
                 {
-                    mediaGraph.startNode = mediaNode;
-                    Debug.LogWarning("【お知らせ】Start Nodeが未設定だったため、自動的に最初のノードを開始地点にしました。");
-                    break;
+                    ExecuteNode(returnNode);
+                    return;
                 }
             }
 
-            // それでも無ければエラー
-            if (mediaGraph.startNode == null)
-            {
-                Debug.LogError("【エラー】グラフの中にMedia Nodeが一つもありません！ノード画面を開いて動画ノードを作成してください。");
-                return;
-            }
-        }
-
-        currentNode = mediaGraph.startNode;
-        currentMode = (currentNode.eventId != "None") ? PlaybackMode.Interactive : PlaybackMode.Normal;
-
-        if (dummyClip != null) StartCoroutine(StartupSequence());
-        else
-        {
-            dualPlayer.PlayFirstMedia(currentNode.isStaticImage, currentNode.clip, currentNode.image, currentNode.isLooping, currentNode.audioClip);
-            StartPlaybackMonitor();
-        }
-    }
-
-    private IEnumerator StartupSequence()
-    {
-        yield return dualPlayer.WarmUpDecoder(dummyClip);
-        float fadeDuration = mediaGraph.defaultCrossfadeDuration;
-
-        dualPlayer.RequestPlayNextMedia(currentNode.isStaticImage, currentNode.clip, currentNode.image, currentNode.isLooping, currentNode.audioClip, fadeDuration);
-        StartPlaybackMonitor();
-    }
-
-    // ==========================================
-    // ★ノードの「Next」の線に沿って進む処理
-    // ==========================================
-    public void PlayNextNode()
-    {
-        if (currentNode == null) return;
-
-        MediaNode nextNode = currentNode.GetNextNode();
-        if (nextNode != null) ExecutePlayNode(nextNode);
-    }
-
-    // ==========================================
-    // ★選択肢などから特定の線を辿って進む処理
-    // ==========================================
-    public void ProceedToBranch(int choiceIndex)
-    {
-        if (currentNode == null) return;
-
-        MediaNode targetNode = currentNode.GetBranchTarget(choiceIndex);
-        if (targetNode != null) ExecutePlayNode(targetNode);
-        else PlayNextNode(); // 線が繋がっていなければ通常遷移にフォールバック
-    }
-
-    private void ExecutePlayNode(MediaNode node)
-    {
-        StopPlaybackMonitor();
-
-        float fadeDuration = mediaGraph.defaultCrossfadeDuration;
-        if (currentNode != null && currentNode.overrideCrossfade)
-        {
-            fadeDuration = currentNode.customCrossfadeDuration;
+            // 帰り道も無ければ、本当にストーリーが終了
+            Debug.Log("【Story】ストーリーの完全な終端に到達しました。");
+            return;
         }
 
         currentNode = node;
-        currentMode = (currentNode.eventId != "None") ? PlaybackMode.Interactive : PlaybackMode.Normal;
-
-        dualPlayer.RequestPlayNextMedia(currentNode.isStaticImage, currentNode.clip, currentNode.image, currentNode.isLooping, currentNode.audioClip, fadeDuration);
-
-        StartPlaybackMonitor();
+        node.Execute(this);
     }
 
-    private void StartPlaybackMonitor()
+    // ==========================================
+    // ★追加：サブグラフに入るための専用メソッド
+    // ==========================================
+    public void EnterSubGraph(StoryGraph sub, BaseStoryNode returnNode)
+    {
+        if (sub == null)
+        {
+            Debug.LogWarning("サブグラフがセットされていません。スキップします。");
+            ExecuteNode(returnNode);
+            return;
+        }
+
+        // サブグラフの中から緑色のStartNodeを探す
+        BaseStoryNode firstNode = null;
+        foreach (var n in sub.nodes)
+        {
+            if (n is StartNode startNode)
+            {
+                firstNode = startNode;
+                break;
+            }
+        }
+
+        if (firstNode != null)
+        {
+            // 今の場所（帰り道）をしおりとして挟んでから、サブグラフのStartNodeへ飛ぶ！
+            returnStack.Push(returnNode);
+            ExecuteNode(firstNode);
+        }
+        else
+        {
+            Debug.LogError($"{sub.name} の中に Start Node がありません！スキップします。");
+            ExecuteNode(returnNode);
+        }
+    }
+
+    // ==========================================
+    // メディア再生処理（一番最初か、トランジションかで分岐）
+    // ==========================================
+    public void PlayMedia(bool isStaticImage, VideoClip clip, Texture2D image, float duration, bool isLooping, AudioClip audioClip, float fade, BaseStoryNode node)
     {
         if (monitorCoroutine != null) StopCoroutine(monitorCoroutine);
-        monitorCoroutine = StartCoroutine(PlaybackMonitorRoutine());
+
+        if (isFirstPlay)
+        {
+            // ★追加：一番最初の再生の時だけ、専用の立ち上げメソッドを使う！
+            isFirstPlay = false;
+            dualPlayer.PlayFirstMedia(isStaticImage, clip, image, isLooping, audioClip);
+        }
+        else
+        {
+            // 2回目以降はクロスフェードで滑らかに繋ぐ
+            dualPlayer.RequestPlayNextMedia(isStaticImage, clip, image, isLooping, audioClip, fade);
+        }
+
+        monitorCoroutine = StartCoroutine(PlaybackMonitorRoutine(isStaticImage, duration, fade, node));
     }
 
-    private void StopPlaybackMonitor()
-    {
-        if (monitorCoroutine != null) StopCoroutine(monitorCoroutine);
-        monitorCoroutine = null;
-    }
-
-    private IEnumerator PlaybackMonitorRoutine()
+    private IEnumerator PlaybackMonitorRoutine(bool isStaticImage, float duration, float fade, BaseStoryNode node)
     {
         while (dualPlayer.IsTransitioning) yield return null;
 
-        float currentOverlap = currentNode.overrideCrossfade ? currentNode.customCrossfadeDuration : mediaGraph.defaultCrossfadeDuration;
-        float triggerTime = Mathf.Max(currentOverlap, 0.1f);
-        bool useCustomTriggerTime = currentNode.eventTriggerTime > 0f;
+        float triggerTime = Mathf.Max(fade, 0.1f);
 
-        if (currentNode.isStaticImage)
+        if (isStaticImage)
         {
-            float waitTime = useCustomTriggerTime ? currentNode.eventTriggerTime : Mathf.Max(0, currentNode.imageDuration - triggerTime);
+            float waitTime = Mathf.Max(0, duration - triggerTime);
             yield return new WaitForSeconds(waitTime);
-            CheckBranchesOrPlayNext(currentNode);
+            ExecuteNode(node.GetNextNode("next"));
         }
         else
         {
@@ -146,38 +181,34 @@ public class VideoSelector : MonoBehaviour
             if (activePlayer == null) yield break;
             while (activePlayer.length <= 0) yield return null;
 
-            double totalTime = activePlayer.length;
-            bool hasTriggered = false;
+            bool useCustomTimer = duration > 0f;
+            double targetTotalTime = useCustomTimer ? duration : activePlayer.length;
             float customTimer = 0f;
 
-            while (!hasTriggered)
+            while (true)
             {
                 if (dualPlayer.IsTransitioning) yield break;
-                double currentTime = activePlayer.time;
 
-                if (useCustomTriggerTime)
+                if (useCustomTimer)
                 {
                     customTimer += Time.deltaTime;
-                    if (customTimer >= currentNode.eventTriggerTime)
+                    if (customTimer >= (targetTotalTime - triggerTime))
                     {
-                        hasTriggered = true;
-                        CheckBranchesOrPlayNext(currentNode);
+                        ExecuteNode(node.GetNextNode("next"));
                         yield break;
                     }
                 }
                 else
                 {
-                    if (currentTime > 0.1f && (totalTime - currentTime) <= triggerTime)
+                    double currentTime = activePlayer.time;
+                    if (currentTime > 0.1f && (targetTotalTime - currentTime) <= triggerTime)
                     {
-                        hasTriggered = true;
-                        CheckBranchesOrPlayNext(currentNode);
+                        ExecuteNode(node.GetNextNode("next"));
                         yield break;
                     }
-
-                    if (currentTime > (totalTime / 2.0) && !activePlayer.isPlaying)
+                    if (currentTime > (targetTotalTime / 2.0) && !activePlayer.isPlaying)
                     {
-                        hasTriggered = true;
-                        CheckBranchesOrPlayNext(currentNode);
+                        ExecuteNode(node.GetNextNode("next"));
                         yield break;
                     }
                 }
@@ -186,27 +217,83 @@ public class VideoSelector : MonoBehaviour
         }
     }
 
-    private void CheckBranchesOrPlayNext(MediaNode node)
+    public void ShowChoices(BranchNode node)
     {
-        if (currentMode == PlaybackMode.Manual) return;
+        if (choicesPanel != null) choicesPanel.SetActive(true);
+        CleanupButtons();
 
-        if (currentMode == PlaybackMode.Interactive)
+        for (int i = 0; i < node.choices.Count; i++)
         {
-            if (node.eventId != "None")
-            {
-                if (node.eventId == "AutoBranchController")
-                {
-                    ProceedToBranch(0); // 最初の分岐線を辿る
-                    return;
-                }
+            var choice = node.choices[i];
 
-                if (onCustomEventTriggered != null)
+            if (!string.IsNullOrEmpty(choice.requiredParam))
+            {
+                if (GameManager.GetParameter(choice.requiredParam) < choice.requiredValue) continue;
+            }
+
+            GameObject newBtn = Instantiate(buttonPrefab, buttonContainer);
+            newBtn.SetActive(true);
+            spawnedButtons.Add(newBtn);
+
+            TMP_Text tmpText = newBtn.GetComponentInChildren<TMP_Text>();
+            if (tmpText != null) tmpText.text = choice.buttonText;
+
+            Button btnComponent = newBtn.GetComponent<Button>();
+            if (btnComponent != null)
+            {
+                int choiceIndex = i;
+                btnComponent.onClick.AddListener(() =>
                 {
-                    onCustomEventTriggered.Invoke(node);
-                }
-                return;
+                    CleanupButtons();
+                    if (choicesPanel != null) choicesPanel.SetActive(false);
+                    ExecuteNode(node.GetNextNode("choices " + choiceIndex));
+                });
             }
         }
-        PlayNextNode();
+
+        if (typewriter != null && !string.IsNullOrEmpty(node.messageText))
+        {
+            typewriter.gameObject.SetActive(true);
+            typewriter.Play(node.messageText, null);
+        }
+
+        if (spawnedButtons.Count == 0)
+        {
+            if (choicesPanel != null) choicesPanel.SetActive(false);
+            ExecuteNode(node.GetNextNode("choices 0"));
+        }
+    }
+
+    private void CleanupButtons()
+    {
+        foreach (var b in spawnedButtons) { if (b != null) Destroy(b); }
+        spawnedButtons.Clear();
+    }
+    // ==========================================
+    // ★追加：自作UI分岐ノードから呼ばれる処理
+    // ==========================================
+    public void ShowCustomChoices(CustomUIBranchNode node)
+    {
+        if (node.customUIPrefab == null)
+        {
+            Debug.LogError("【エラー】Custom UI Branch ノードにプレハブがセットされていません！");
+            ExecuteNode(node.GetNextNode("choices 0")); // エラー回避のため強制的に0番に進む
+            return;
+        }
+
+        // 自作UIのプレハブを生成する（普段使っているchoicesPanelの親＝Canvasの下に出す）
+        Transform parentTransform = choicesPanel != null ? choicesPanel.transform.parent : this.transform;
+        GameObject uiInstance = Instantiate(node.customUIPrefab, parentTransform);
+
+        // プレハブに付いているマネージャーを初期化
+        CustomBranchUIManager uiManager = uiInstance.GetComponent<CustomBranchUIManager>();
+        if (uiManager != null)
+        {
+            uiManager.Setup(this, node);
+        }
+        else
+        {
+            Debug.LogError("【エラー】生成したプレハブに CustomBranchUIManager スクリプトがアタッチされていません！");
+        }
     }
 }

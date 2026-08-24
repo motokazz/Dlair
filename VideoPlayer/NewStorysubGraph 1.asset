@@ -1,0 +1,279 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-6169556531641711644
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c944b4d42069104ea6a489edfac1aae, type: 3}
+  m_Name: Play Image
+  m_EditorClassIdentifier: Assembly-CSharp::PlayImageNode
+  graph: {fileID: 11400000}
+  position: {x: -534.31885, y: -267.93277}
+  ports:
+    keys:
+    - next
+    - enter
+    values:
+    - _fieldName: next
+      _node: {fileID: -6169556531641711644}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: enter
+        node: {fileID: 296237187077403371}
+        reroutePoints: []
+      _direction: 1
+      _connectionType: 1
+      _typeConstraint: 0
+      _dynamic: 0
+    - _fieldName: enter
+      _node: {fileID: -6169556531641711644}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: next
+        node: {fileID: 8107871704488276286}
+        reroutePoints: []
+      _direction: 0
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 0
+  title: New Image
+  image: {fileID: 2800000, guid: ed61bd88d6d10614ea8af4adb1b9d203, type: 3}
+  duration: 1
+  audioClip: {fileID: 0}
+  crossFadeDuration: 1
+--- !u!114 &-3822835605518696174
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16c418065be5bb540a818bbf7b90f0fa, type: 3}
+  m_Name: Parameter
+  m_EditorClassIdentifier: Assembly-CSharp::ParameterNode
+  graph: {fileID: 11400000}
+  position: {x: -262.31885, y: 52.06723}
+  ports:
+    keys:
+    - next
+    - enter
+    values:
+    - _fieldName: next
+      _node: {fileID: -3822835605518696174}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: enter
+        node: {fileID: 296237187077403371}
+        reroutePoints: []
+      _direction: 1
+      _connectionType: 1
+      _typeConstraint: 0
+      _dynamic: 0
+    - _fieldName: enter
+      _node: {fileID: -3822835605518696174}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: choices 1
+        node: {fileID: 296237187077403371}
+        reroutePoints: []
+      _direction: 0
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 0
+  paramName: A
+  addValue: 10
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7acdfadf780957479eb121599f6d87f, type: 3}
+  m_Name: NewStorysubGraph 1
+  m_EditorClassIdentifier: Assembly-CSharp::StoryGraph
+  nodes:
+  - {fileID: 296237187077403371}
+  - {fileID: -3822835605518696174}
+  - {fileID: 8107871704488276286}
+  - {fileID: -6169556531641711644}
+  - {fileID: 2227603748557044247}
+  defaultCrossfadeDuration: 1
+  startNode: {fileID: 0}
+--- !u!114 &296237187077403371
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 94cc4e5c81560384db42dacf92f5f465, type: 3}
+  m_Name: Branch
+  m_EditorClassIdentifier: Assembly-CSharp::BranchNode
+  graph: {fileID: 11400000}
+  position: {x: -246.31885, y: -299.93277}
+  ports:
+    keys:
+    - choices
+    - enter
+    - choices 0
+    - choices 1
+    values:
+    - _fieldName: choices
+      _node: {fileID: 296237187077403371}
+      _typeQualifiedName: System.Collections.Generic.List`1[[BranchNode+BranchChoice,
+        Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]],
+        mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089
+      connections: []
+      _direction: 1
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 0
+    - _fieldName: enter
+      _node: {fileID: 296237187077403371}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: next
+        node: {fileID: -6169556531641711644}
+        reroutePoints: []
+      - fieldName: next
+        node: {fileID: -3822835605518696174}
+        reroutePoints: []
+      _direction: 0
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 0
+    - _fieldName: choices 0
+      _node: {fileID: 296237187077403371}
+      _typeQualifiedName: BranchNode+BranchChoice, Assembly-CSharp, Version=0.0.0.0,
+        Culture=neutral, PublicKeyToken=null
+      connections: []
+      _direction: 1
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 1
+    - _fieldName: choices 1
+      _node: {fileID: 296237187077403371}
+      _typeQualifiedName: BranchNode+BranchChoice, Assembly-CSharp, Version=0.0.0.0,
+        Culture=neutral, PublicKeyToken=null
+      connections:
+      - fieldName: enter
+        node: {fileID: -3822835605518696174}
+        reroutePoints: []
+      _direction: 1
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 1
+  choices:
+  - buttonText: open
+    requiredParam: A
+    requiredValue: 10
+  - buttonText: talk
+    requiredParam: 
+    requiredValue: 0
+  messageText: test
+--- !u!114 &2227603748557044247
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b88878ff0ca66904eb72808c36278226, type: 3}
+  m_Name: Start
+  m_EditorClassIdentifier: Assembly-CSharp::StartNode
+  graph: {fileID: 11400000}
+  position: {x: -987.01904, y: -451.19955}
+  ports:
+    keys:
+    - next
+    - enter
+    values:
+    - _fieldName: next
+      _node: {fileID: 2227603748557044247}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: enter
+        node: {fileID: 8107871704488276286}
+        reroutePoints: []
+      _direction: 1
+      _connectionType: 1
+      _typeConstraint: 0
+      _dynamic: 0
+    - _fieldName: enter
+      _node: {fileID: 2227603748557044247}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections: []
+      _direction: 0
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 0
+--- !u!114 &8107871704488276286
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc3e49b3e3810b44ab5c30901fed0f97, type: 3}
+  m_Name: Play Clip
+  m_EditorClassIdentifier: Assembly-CSharp::PlayClipNode
+  graph: {fileID: 11400000}
+  position: {x: -758.31885, y: -267.93277}
+  ports:
+    keys:
+    - next
+    - enter
+    values:
+    - _fieldName: next
+      _node: {fileID: 8107871704488276286}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: enter
+        node: {fileID: -6169556531641711644}
+        reroutePoints: []
+      _direction: 1
+      _connectionType: 1
+      _typeConstraint: 0
+      _dynamic: 0
+    - _fieldName: enter
+      _node: {fileID: 8107871704488276286}
+      _typeQualifiedName: StoryFlow, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      connections:
+      - fieldName: next
+        node: {fileID: 2227603748557044247}
+        reroutePoints: []
+      _direction: 0
+      _connectionType: 0
+      _typeConstraint: 0
+      _dynamic: 0
+  title: New Video
+  clip: {fileID: 32900000, guid: 3410665e477a0d94eaa0adb4bcf96060, type: 3}
+  duration: 1
+  audioClip: {fileID: 0}
+  isLooping: 1
+  crossFadeDuration: 1
