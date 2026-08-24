@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -7,70 +8,49 @@ public class ChoicesController : MonoBehaviour, IMiniGame
 {
     public string MiniGameComponentId => "ChoicesController";
 
-    [Header("UI Elements")]
     public GameObject choicesPanel;
-
-    [Tooltip("汎用化されたタイプライターエフェクト")]
     public TypewriterEffect typewriter;
-
     public Transform buttonContainer;
     public GameObject buttonPrefab;
 
     private VideoSelector currentSelector;
     private List<GameObject> spawnedButtons = new List<GameObject>();
 
-    public void StartGame(VideoSelector selector, MediaPlaylist.MediaData data)
+    public void StartGame(VideoSelector selector, MediaNode data) // ★引数を変更
     {
         currentSelector = selector;
-
-        // ==========================================
-        // ★大修正：一番最初にパネルをActiveにする！
-        // これをしないと、子供のオブジェクトでコルーチンが動かせません。
-        // ==========================================
         if (choicesPanel != null) choicesPanel.SetActive(true);
 
-        // 古いボタンの消去
         foreach (var btnObj in spawnedButtons) Destroy(btnObj);
         spawnedButtons.Clear();
 
-        // ボタンの生成（最初は非表示）
         if (data.choices != null)
         {
-            foreach (var choice in data.choices)
+            for (int i = 0; i < data.choices.Count; i++) // ★for文に変更
             {
+                var choice = data.choices[i];
                 GameObject newBtn = Instantiate(buttonPrefab, buttonContainer);
-                newBtn.SetActive(false); // ボタンは隠しておく
+                newBtn.SetActive(false);
                 spawnedButtons.Add(newBtn);
 
                 TMP_Text tmpText = newBtn.GetComponentInChildren<TMP_Text>();
                 if (tmpText != null) tmpText.text = choice.branchKey;
-                else
-                {
-                    Text fallbackText = newBtn.GetComponentInChildren<Text>();
-                    if (fallbackText != null) fallbackText.text = choice.branchKey;
-                }
 
                 Button btnComponent = newBtn.GetComponent<Button>();
                 if (btnComponent != null)
                 {
-                    string target = choice.targetId;
-                    btnComponent.onClick.AddListener(() => OnChoiceSelected(target));
+                    int choiceIndex = i; // ★クロージャ対策（何番目のボタンか記憶）
+                    btnComponent.onClick.AddListener(() => OnChoiceSelected(choiceIndex));
                 }
             }
         }
 
-        // ==========================================
-        // 文字の表示開始（親パネルがActiveになったので、安全にコルーチンが動きます）
-        // ==========================================
         if (typewriter != null)
         {
             bool hasText = !string.IsNullOrEmpty(data.eventParameter);
             typewriter.gameObject.SetActive(hasText);
 
-            if (hasText)
-            {
-                typewriter.Play(data.eventParameter, ShowAllButtons);
-            }
+            if (hasText) typewriter.Play(data.eventParameter, ShowAllButtons);
             else ShowAllButtons();
         }
         else ShowAllButtons();
@@ -81,9 +61,9 @@ public class ChoicesController : MonoBehaviour, IMiniGame
         foreach (var btn in spawnedButtons) { if (btn != null) btn.SetActive(true); }
     }
 
-    private void OnChoiceSelected(string targetId)
+    private void OnChoiceSelected(int choiceIndex) // ★インデックスを受け取る
     {
         if (choicesPanel != null) choicesPanel.SetActive(false);
-        currentSelector.ProceedToNextTarget(targetId);
+        currentSelector.ProceedToBranch(choiceIndex); // ★線に沿って進む！
     }
 }

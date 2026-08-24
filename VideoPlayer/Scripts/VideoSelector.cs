@@ -1,184 +1,144 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using UnityEngine;
-using UnityEngine.UI;
+﻿using UnityEngine;
 using UnityEngine.Video;
 using UnityEngine.Events;
-using TMPro;
-
-[System.Serializable]
-public class GallerySaveData
-{
-    public List<string> unlockedIds = new List<string>();
-}
-
-[System.Serializable]
-public class CustomEventTrigger : UnityEvent<MediaPlaylist.MediaData> { }
+using System.Collections;
 
 public class VideoSelector : MonoBehaviour
 {
-    public enum PlaybackMode { Manual, GalleryAuto, Interactive }
+    public enum PlaybackMode { Normal, Interactive, Manual }
 
-    [Header("Player Reference")]
+    [Header("Node Graph")]
+    public MediaGraph mediaGraph; // ★プレイリストではなくグラフ！
+
+    [Header("References")]
     public DualVideoPlayer dualPlayer;
-    public MediaPlaylist playlistAsset;
     public VideoClip dummyClip;
 
-    [Header("Playback Settings")]
-    public PlaybackMode currentMode = PlaybackMode.Manual;
-    public bool loopPlaylist = true;
-
-    [Header("Gallery UI")]
-    public GameObject buttonPrefab;
-    public Transform buttonContainer;
-
     [Header("Events")]
-    public CustomEventTrigger onCustomEventTriggered;
+    public UnityEvent<MediaNode> onCustomEventTriggered; // ★MediaNodeに変更
 
-    private int currentIndex = -1;
-    private int pendingIndex = -1;
-    private Coroutine playbackMonitorCoroutine;
-    private List<GameObject> spawnedButtons = new List<GameObject>();
-    private GallerySaveData saveData = new GallerySaveData();
-    private string saveFilePath;
-
-    private void Awake()
-    {
-        saveFilePath = Path.Combine(Application.persistentDataPath, "GallerySave.json");
-        LoadSaveData();
-    }
+    private MediaNode currentNode; // ★現在のノードを記憶
+    private PlaybackMode currentMode = PlaybackMode.Normal;
+    private Coroutine monitorCoroutine;
 
     private void Start()
     {
-        if (playlistAsset == null || playlistAsset.items.Length == 0) return;
-        GenerateButtons();
-        int firstIndex = GetFirstUnlockedIndex();
-        if (firstIndex == -1) return;
+        // ==========================================
+        // ★修正：エラーを分かりやすくし、Start Nodeを自動で探す親切設計に
+        // ==========================================
+        if (mediaGraph == null)
+        {
+            Debug.LogError("【エラー】VideoSelectorに『Media Graph』がセットされていません！インスペクターでグラフをアタッチしてください。");
+            return;
+        }
 
-        if (dummyClip != null) StartCoroutine(StartupSequence(firstIndex));
+        // Start Nodeが設定されていない場合の自動修復
+        if (mediaGraph.startNode == null)
+        {
+            foreach (var node in mediaGraph.nodes)
+            {
+                if (node is MediaNode mediaNode)
+                {
+                    mediaGraph.startNode = mediaNode;
+                    Debug.LogWarning("【お知らせ】Start Nodeが未設定だったため、自動的に最初のノードを開始地点にしました。");
+                    break;
+                }
+            }
+
+            // それでも無ければエラー
+            if (mediaGraph.startNode == null)
+            {
+                Debug.LogError("【エラー】グラフの中にMedia Nodeが一つもありません！ノード画面を開いて動画ノードを作成してください。");
+                return;
+            }
+        }
+
+        currentNode = mediaGraph.startNode;
+        currentMode = (currentNode.eventId != "None") ? PlaybackMode.Interactive : PlaybackMode.Normal;
+
+        if (dummyClip != null) StartCoroutine(StartupSequence());
         else
         {
-            currentIndex = firstIndex;
-            MediaPlaylist.MediaData firstData = playlistAsset.items[currentIndex];
-
-            // ★修正：DetermineInitialLoopを削除し、直接 firstData.isLooping を渡す！
-            dualPlayer.PlayFirstMedia(firstData.isStaticImage, firstData.clip, firstData.image, firstData.isLooping, firstData.audioClip);
-
+            dualPlayer.PlayFirstMedia(currentNode.isStaticImage, currentNode.clip, currentNode.image, currentNode.isLooping, currentNode.audioClip);
             StartPlaybackMonitor();
         }
     }
 
-    private IEnumerator StartupSequence(int firstIndex)
+    private IEnumerator StartupSequence()
     {
         yield return dualPlayer.WarmUpDecoder(dummyClip);
-        float fadeDuration = playlistAsset.defaultCrossfadeDuration;
-        currentIndex = firstIndex;
-        MediaPlaylist.MediaData firstData = playlistAsset.items[currentIndex];
+        float fadeDuration = mediaGraph.defaultCrossfadeDuration;
 
-        // ★修正：純粋に firstData.isLooping を渡すだけ！
-        dualPlayer.RequestPlayNextMedia(firstData.isStaticImage, firstData.clip, firstData.image, firstData.isLooping, firstData.audioClip, fadeDuration);
-
+        dualPlayer.RequestPlayNextMedia(currentNode.isStaticImage, currentNode.clip, currentNode.image, currentNode.isLooping, currentNode.audioClip, fadeDuration);
         StartPlaybackMonitor();
     }
 
-    private void Update()
+    // ==========================================
+    // ★ノードの「Next」の線に沿って進む処理
+    // ==========================================
+    public void PlayNextNode()
     {
-        if (!dualPlayer.IsTransitioning && pendingIndex != -1)
-        {
-            int indexToPlay = pendingIndex;
-            pendingIndex = -1;
-            ExecutePlayVideo(indexToPlay);
-        }
+        if (currentNode == null) return;
+
+        MediaNode nextNode = currentNode.GetNextNode();
+        if (nextNode != null) ExecutePlayNode(nextNode);
     }
 
-    private void LoadSaveData() { try { if (File.Exists(saveFilePath)) { saveData = JsonUtility.FromJson<GallerySaveData>(File.ReadAllText(saveFilePath)); if (saveData == null) saveData = new GallerySaveData(); } else saveData = new GallerySaveData(); } catch { saveData = new GallerySaveData(); } }
-    private void SaveDataToFile() { try { File.WriteAllText(saveFilePath, JsonUtility.ToJson(saveData, true)); } catch { } }
-
-    public bool IsUnlocked(int index) { if (index < 0 || index >= playlistAsset.items.Length) return false; var data = playlistAsset.items[index]; if (data.isUnlockedByDefault) return true; string id = string.IsNullOrEmpty(data.unlockId) ? data.title : data.unlockId; return saveData.unlockedIds.Contains(id); }
-    public void UnlockMedia(int index) { if (index < 0 || index >= playlistAsset.items.Length) return; var data = playlistAsset.items[index]; string id = string.IsNullOrEmpty(data.unlockId) ? data.title : data.unlockId; if (!saveData.unlockedIds.Contains(id)) { saveData.unlockedIds.Add(id); SaveDataToFile(); } RefreshButtons(); }
-    public void ResetAllUnlocks() { saveData.unlockedIds.Clear(); SaveDataToFile(); RefreshButtons(); }
-
-    private int GetFirstUnlockedIndex() { for (int i = 0; i < playlistAsset.items.Length; i++) { if (IsUnlocked(i)) return i; } return -1; }
-
-    private void GenerateButtons()
+    // ==========================================
+    // ★選択肢などから特定の線を辿って進む処理
+    // ==========================================
+    public void ProceedToBranch(int choiceIndex)
     {
-        foreach (var b in spawnedButtons) Destroy(b);
-        spawnedButtons.Clear();
-        for (int i = 0; i < playlistAsset.items.Length; i++)
-        {
-            int index = i;
-            GameObject btnObj = Instantiate(buttonPrefab, buttonContainer);
-            Button btn = btnObj.GetComponent<Button>();
-            if (btn != null) btn.onClick.AddListener(() => OnVideoSelectButtonClicked(index));
-            spawnedButtons.Add(btnObj);
-        }
-        RefreshButtons();
+        if (currentNode == null) return;
+
+        MediaNode targetNode = currentNode.GetBranchTarget(choiceIndex);
+        if (targetNode != null) ExecutePlayNode(targetNode);
+        else PlayNextNode(); // 線が繋がっていなければ通常遷移にフォールバック
     }
 
-    public void RefreshButtons()
+    private void ExecutePlayNode(MediaNode node)
     {
-        for (int i = 0; i < playlistAsset.items.Length; i++)
-        {
-            if (i >= spawnedButtons.Count) break;
-            GameObject btnObj = spawnedButtons[i];
-            MediaPlaylist.MediaData data = playlistAsset.items[i];
-            bool isUnlocked = IsUnlocked(i);
-            btnObj.name = $"VideoBtn_{i:00}_{data.title}";
-            Text titleText = btnObj.GetComponentInChildren<Text>();
-            if (titleText != null) titleText.text = isUnlocked ? data.title : "???";
-            TMP_Text tmpTitleText = btnObj.GetComponentInChildren<TMP_Text>();
-            if (tmpTitleText != null) tmpTitleText.text = isUnlocked ? data.title : "???";
-            Image thumbImage = btnObj.GetComponent<Image>();
-            if (thumbImage != null && data.thumbnail != null) { thumbImage.sprite = data.thumbnail; thumbImage.color = isUnlocked ? Color.white : new Color(0.2f, 0.2f, 0.2f, 1f); }
-            Button btn = btnObj.GetComponent<Button>();
-            if (btn != null) btn.interactable = isUnlocked;
-        }
-    }
-
-    public void OnVideoSelectButtonClicked(int index) { if (index < 0 || index >= playlistAsset.items.Length) return; if (index == currentIndex) return; if (!IsUnlocked(index)) return; if (dualPlayer.IsTransitioning) { pendingIndex = index; return; } ExecutePlayVideo(index); }
-
-    private void ExecutePlayVideo(int index)
-    {
-        pendingIndex = -1;
         StopPlaybackMonitor();
 
-        float fadeDuration = playlistAsset.defaultCrossfadeDuration;
-        if (currentIndex >= 0 && currentIndex < playlistAsset.items.Length)
+        float fadeDuration = mediaGraph.defaultCrossfadeDuration;
+        if (currentNode != null && currentNode.overrideCrossfade)
         {
-            MediaPlaylist.MediaData previousData = playlistAsset.items[currentIndex];
-            fadeDuration = previousData.overrideCrossfade ? previousData.customCrossfadeDuration : playlistAsset.defaultCrossfadeDuration;
+            fadeDuration = currentNode.customCrossfadeDuration;
         }
 
-        currentIndex = index;
-        MediaPlaylist.MediaData selectedData = playlistAsset.items[currentIndex];
+        currentNode = node;
+        currentMode = (currentNode.eventId != "None") ? PlaybackMode.Interactive : PlaybackMode.Normal;
 
-        // ★修正：純粋に selectedData.isLooping を渡すだけ！
-        dualPlayer.RequestPlayNextMedia(selectedData.isStaticImage, selectedData.clip, selectedData.image, selectedData.isLooping, selectedData.audioClip, fadeDuration);
+        dualPlayer.RequestPlayNextMedia(currentNode.isStaticImage, currentNode.clip, currentNode.image, currentNode.isLooping, currentNode.audioClip, fadeDuration);
 
         StartPlaybackMonitor();
     }
 
-    private void StartPlaybackMonitor() { StopPlaybackMonitor(); playbackMonitorCoroutine = StartCoroutine(PlaybackMonitorRoutine()); }
-    private void StopPlaybackMonitor() { if (playbackMonitorCoroutine != null) { StopCoroutine(playbackMonitorCoroutine); playbackMonitorCoroutine = null; } }
+    private void StartPlaybackMonitor()
+    {
+        if (monitorCoroutine != null) StopCoroutine(monitorCoroutine);
+        monitorCoroutine = StartCoroutine(PlaybackMonitorRoutine());
+    }
+
+    private void StopPlaybackMonitor()
+    {
+        if (monitorCoroutine != null) StopCoroutine(monitorCoroutine);
+        monitorCoroutine = null;
+    }
 
     private IEnumerator PlaybackMonitorRoutine()
     {
         while (dualPlayer.IsTransitioning) yield return null;
-        MediaPlaylist.MediaData currentData = playlistAsset.items[currentIndex];
 
-        float currentOverlap = currentData.overrideCrossfade ? currentData.customCrossfadeDuration : playlistAsset.defaultCrossfadeDuration;
+        float currentOverlap = currentNode.overrideCrossfade ? currentNode.customCrossfadeDuration : mediaGraph.defaultCrossfadeDuration;
         float triggerTime = Mathf.Max(currentOverlap, 0.1f);
+        bool useCustomTriggerTime = currentNode.eventTriggerTime > 0f;
 
-        // ★ 0より大きい数字が設定されているかチェック
-        bool useCustomTriggerTime = currentData.eventTriggerTime > 0f;
-
-        if (currentData.isStaticImage)
+        if (currentNode.isStaticImage)
         {
-            // カスタム時間が設定されていればそれを使い、0なら従来の終端計算を使う
-            float waitTime = useCustomTriggerTime ? currentData.eventTriggerTime : Mathf.Max(0, currentData.imageDuration - triggerTime);
+            float waitTime = useCustomTriggerTime ? currentNode.eventTriggerTime : Mathf.Max(0, currentNode.imageDuration - triggerTime);
             yield return new WaitForSeconds(waitTime);
-            CheckBranchesOrPlayNext(currentData);
+            CheckBranchesOrPlayNext(currentNode);
         }
         else
         {
@@ -188,102 +148,65 @@ public class VideoSelector : MonoBehaviour
 
             double totalTime = activePlayer.length;
             bool hasTriggered = false;
-            float customTimer = 0f; // ★動画開始からの実時間を測るタイマー
+            float customTimer = 0f;
 
             while (!hasTriggered)
             {
                 if (dualPlayer.IsTransitioning) yield break;
-
                 double currentTime = activePlayer.time;
 
-                // ==========================================
-                // 【A】指定された時間（秒）で発火させるモード
-                // ==========================================
                 if (useCustomTriggerTime)
                 {
-                    customTimer += Time.deltaTime; // 動画がループしようが関係なく秒数を数える
-                    if (customTimer >= currentData.eventTriggerTime)
+                    customTimer += Time.deltaTime;
+                    if (customTimer >= currentNode.eventTriggerTime)
                     {
                         hasTriggered = true;
-                        CheckBranchesOrPlayNext(currentData);
+                        CheckBranchesOrPlayNext(currentNode);
                         yield break;
                     }
                 }
-                // ==========================================
-                // 【B】今まで通り、動画の終端（フェード開始タイミング）で発火させるモード
-                // ==========================================
                 else
                 {
                     if (currentTime > 0.1f && (totalTime - currentTime) <= triggerTime)
                     {
                         hasTriggered = true;
-                        CheckBranchesOrPlayNext(currentData);
+                        CheckBranchesOrPlayNext(currentNode);
                         yield break;
                     }
 
                     if (currentTime > (totalTime / 2.0) && !activePlayer.isPlaying)
                     {
                         hasTriggered = true;
-                        CheckBranchesOrPlayNext(currentData);
+                        CheckBranchesOrPlayNext(currentNode);
                         yield break;
                     }
                 }
-
                 yield return null;
             }
         }
     }
 
-    private void CheckBranchesOrPlayNext(MediaPlaylist.MediaData currentData)
+    private void CheckBranchesOrPlayNext(MediaNode node)
     {
         if (currentMode == PlaybackMode.Manual) return;
 
         if (currentMode == PlaybackMode.Interactive)
         {
-            if (currentData.eventId != "None")
+            if (node.eventId != "None")
             {
-                if (currentData.eventId == "AutoBranchController") // ★ついでに名前を合わせました
+                if (node.eventId == "AutoBranchController")
                 {
-                    if (currentData.choices != null && currentData.choices.Length > 0) ProceedToNextTarget(currentData.choices[0].targetId);
-                    else PlayNextInPlaylist();
+                    ProceedToBranch(0); // 最初の分岐線を辿る
                     return;
                 }
 
-                // ★削除: dualPlayer.SetWaitMode(currentData.loopWhileWaiting); を消去（もう既にループ設定で回っているため不要！）
-
                 if (onCustomEventTriggered != null)
                 {
-                    onCustomEventTriggered.Invoke(currentData);
+                    onCustomEventTriggered.Invoke(node);
                 }
                 return;
             }
         }
-        PlayNextInPlaylist();
-    }
-
-    public void ProceedToNextTarget(string targetId)
-    {
-        int targetIndex = -1;
-        for (int i = 0; i < playlistAsset.items.Length; i++)
-        {
-            var data = playlistAsset.items[i];
-            string id = string.IsNullOrEmpty(data.unlockId) ? data.title : data.unlockId;
-            if (id == targetId) { targetIndex = i; break; }
-        }
-        if (targetIndex != -1) { UnlockMedia(targetIndex); if (dualPlayer.IsTransitioning) pendingIndex = targetIndex; else ExecutePlayVideo(targetIndex); }
-        else Debug.LogWarning($"分岐先の動画が見つかりません。Target ID: {targetId}");
-    }
-
-    public void PlayNextInPlaylist()
-    {
-        int nextIndex = currentIndex;
-        int attempts = 0;
-        while (attempts < playlistAsset.items.Length)
-        {
-            nextIndex++;
-            if (nextIndex >= playlistAsset.items.Length) { if (loopPlaylist) nextIndex = 0; else return; }
-            if (IsUnlocked(nextIndex)) { ExecutePlayVideo(nextIndex); return; }
-            attempts++;
-        }
+        PlayNextNode();
     }
 }

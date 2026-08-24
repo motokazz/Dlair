@@ -1219,13 +1219,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 04e77f15edf0cb245850624ced1881cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VideoSelector
+  mediaGraph: {fileID: 11400000, guid: 5c42e573bcb406c4bafb29b39a98fa01, type: 2}
   dualPlayer: {fileID: 1871428319}
-  playlistAsset: {fileID: 11400000, guid: 7caacf06b27178f4995d2048ea894789, type: 2}
   dummyClip: {fileID: 32900000, guid: 2655400e42ec2f1409181c772354ddf5, type: 3}
-  currentMode: 2
-  loopPlaylist: 1
-  buttonPrefab: {fileID: 86400108074479804, guid: 22e28cccf2eb7ca4cb38555ea983fca9, type: 3}
-  buttonContainer: {fileID: 718595103}
   onCustomEventTriggered:
     m_PersistentCalls:
       m_Calls:

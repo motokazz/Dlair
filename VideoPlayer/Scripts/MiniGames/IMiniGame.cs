@@ -2,7 +2,7 @@
 
 public interface IMiniGame
 {
-    // ★ Enumをやめ、自分のクラス名（ID）を名乗るだけにする
     string MiniGameComponentId { get; }
-    void StartGame(VideoSelector selector, MediaPlaylist.MediaData data);
+    // ★ MediaPlaylist.MediaData から MediaNode に変更
+    void StartGame(VideoSelector selector, MediaNode data);
 }

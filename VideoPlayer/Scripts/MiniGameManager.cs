@@ -1,36 +1,52 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 
 public class MiniGameManager : MonoBehaviour
 {
     public VideoSelector videoSelector;
-    private IMiniGame[] miniGames;
+    private Dictionary<string, IMiniGame> miniGames = new Dictionary<string, IMiniGame>();
 
-    private void Start()
+    private void Awake()
     {
-        miniGames = GetComponentsInChildren<IMiniGame>(true);
-    }
-
-    public void ReceiveCustomEvent(MediaPlaylist.MediaData data)
-    {
-        string targetComponentId = data.eventId;
-
-        // ★ AutoBranchの除外を削除
-        if (string.IsNullOrEmpty(targetComponentId) || targetComponentId == "None") return;
-
-        foreach (var game in miniGames)
+        IMiniGame[] games = GetComponentsInChildren<IMiniGame>(true);
+        foreach (var game in games)
         {
-            if (game.MiniGameComponentId == targetComponentId)
+            if (!miniGames.ContainsKey(game.MiniGameComponentId))
             {
-                // AutoBranchの時はログが出るとうるさいので非表示にする配慮
-                if (targetComponentId != "AutoBranchController")
-                {
-                    Debug.Log($"<color=cyan>[Manager]</color> '{targetComponentId}' を開始します！");
-                }
-                game.StartGame(videoSelector, data);
-                return;
+                miniGames.Add(game.MiniGameComponentId, game);
             }
         }
+    }
 
-        Debug.LogWarning($"<color=red>[Manager]</color> 対応するスクリプト '{targetComponentId}' がシーン上に見つかりません！");
+    private void OnEnable()
+    {
+        if (videoSelector != null)
+        {
+            videoSelector.onCustomEventTriggered.AddListener(ReceiveCustomEvent);
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (videoSelector != null)
+        {
+            videoSelector.onCustomEventTriggered.RemoveListener(ReceiveCustomEvent);
+        }
+    }
+
+    // ★受け取るデータが MediaNode になりました！
+    public void ReceiveCustomEvent(MediaNode data)
+    {
+        string targetEventId = data.eventId;
+
+        if (miniGames.TryGetValue(targetEventId, out IMiniGame targetGame))
+        {
+            targetGame.StartGame(videoSelector, data);
+        }
+        else
+        {
+            Debug.LogWarning($"MiniGame '{targetEventId}' が見つかりませんでした。");
+            videoSelector.PlayNextNode();
+        }
     }
 }

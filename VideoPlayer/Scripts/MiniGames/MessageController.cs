@@ -1,5 +1,5 @@
 ﻿using UnityEngine;
-using UnityEngine.UI; // ★追加：Buttonを使うために必要
+using UnityEngine.UI;
 
 public class MessageController : MonoBehaviour, IMiniGame
 {
@@ -9,31 +9,24 @@ public class MessageController : MonoBehaviour, IMiniGame
     public GameObject messagePanel;
     public TypewriterEffect typewriter;
 
-    // ==========================================
-    // ★追加：画面全体を覆う透明なボタン
-    // ==========================================
     [Tooltip("画面全体を覆う透明なボタン（クリック判定用）")]
     public Button tapButton;
 
     private VideoSelector currentSelector;
-    private MediaPlaylist.MediaData currentData;
+    private MediaNode currentData; // ★重複しないように一箇所だけに修正
     private bool isTyping = false;
 
-    public void StartGame(VideoSelector selector, MediaPlaylist.MediaData data)
+    public void StartGame(VideoSelector selector, MediaNode data)
     {
         currentSelector = selector;
         currentData = data;
 
-        // パネルを一番最初に表示（コルーチン対策）
         if (messagePanel != null) messagePanel.SetActive(true);
 
-        // ==========================================
-        // ★大修正：コードから直接コールバック（リスナー）を登録！
-        // ==========================================
         if (tapButton != null)
         {
-            tapButton.onClick.RemoveAllListeners(); // 古いコールバックをお掃除
-            tapButton.onClick.AddListener(OnScreenTapped); // コールバックを登録
+            tapButton.onClick.RemoveAllListeners();
+            tapButton.onClick.AddListener(OnScreenTapped);
         }
 
         if (typewriter != null && !string.IsNullOrEmpty(data.eventParameter))
@@ -47,23 +40,20 @@ public class MessageController : MonoBehaviour, IMiniGame
         }
     }
 
-    // コールバックとして自動的に呼ばれるメソッド（publicである必要もなくなりました！）
     private void OnScreenTapped()
     {
         if (isTyping)
         {
-            // まだ文字が表示中なら、スキップして全表示する
             typewriter.Skip();
         }
         else
         {
-            // 全表示されているなら、次の動画へ進む
             if (messagePanel != null) messagePanel.SetActive(false);
 
-            if (currentData.choices != null && currentData.choices.Length > 0)
-                currentSelector.ProceedToNextTarget(currentData.choices[0].targetId);
+            if (currentData.choices != null && currentData.choices.Count > 0)
+                currentSelector.ProceedToBranch(0); // ★ノードの線に沿って進む
             else
-                currentSelector.PlayNextInPlaylist();
+                currentSelector.PlayNextNode(); // ★通常遷移
         }
     }
 }

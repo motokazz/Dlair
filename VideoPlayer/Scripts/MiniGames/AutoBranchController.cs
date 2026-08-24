@@ -2,20 +2,20 @@
 
 public class AutoBranchController : MonoBehaviour, IMiniGame
 {
-    // ★ 私は「AutoBranchController」です！
     public string MiniGameComponentId => "AutoBranchController";
 
-    public void StartGame(VideoSelector selector, MediaPlaylist.MediaData data)
+    // ★ ここを MediaPlaylist.MediaData から MediaNode に変更しました
+    public void StartGame(VideoSelector selector, MediaNode data)
     {
-        // リストの1番目に設定された動画へ自動で飛ぶ
-        if (data.choices != null && data.choices.Length > 0)
+        // 最初の分岐線（Choicesの0番目）が繋がっていればそちらへ、
+        // 繋がっていなければ通常のNextの線へ進む
+        if (data.choices != null && data.choices.Count > 0)
         {
-            selector.ProceedToNextTarget(data.choices[0].targetId);
+            selector.ProceedToBranch(0);
         }
         else
         {
-            // 設定忘れの場合は次へ進む
-            selector.PlayNextInPlaylist();
+            selector.PlayNextNode();
         }
     }
 }
