@@ -1067,7 +1067,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: 049a41aa75e573240bfdb962669df36a, type: 3}
+  m_Resource: {fileID: 0}
   m_PlayOnAwake: 0
   m_Volume: 1
   m_Pitch: 1
@@ -1182,7 +1182,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 04e77f15edf0cb245850624ced1881cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VideoSelector
-  storyGraph: {fileID: 11400000, guid: 7cd74b65853150d4091246af7bb6eeaf, type: 2}
+  storyGraph: {fileID: 11400000, guid: d08f3daba02582b4ba23c163d7664ea1, type: 2}
   dualPlayer: {fileID: 1871428319}
   dummyClip: {fileID: 32900000, guid: 2655400e42ec2f1409181c772354ddf5, type: 3}
   choicesPanel: {fileID: 1422850767}
@@ -2086,7 +2086,7 @@ VideoPlayer:
   m_TargetCameraAlpha: 1
   m_TargetCamera3DLayout: 0
   m_TargetCamera: {fileID: 0}
-  m_TargetTexture: {fileID: 8400000, guid: 4cd8c85ad766a484496d80939a7cf730, type: 2}
+  m_TargetTexture: {fileID: 8400000, guid: b138937cf45caca4e837cfd0e7628edd, type: 2}
   m_TimeReference: 0
   m_TargetMaterialRenderer: {fileID: 0}
   m_TargetMaterialProperty: <noninit>
@@ -2136,7 +2136,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: ae466ddc32fe8b545a969d775ce7c95e, type: 3}
+  m_Resource: {fileID: 0}
   m_PlayOnAwake: 0
   m_Volume: 1
   m_Pitch: 1
