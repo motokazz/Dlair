@@ -34,6 +34,11 @@ public class StoryGraphView : GraphView
         unserializeAndPaste = UnserializeAndPaste;
         canPasteSerializedData = CanPaste;
 
+        graphViewChanged = OnGraphViewChanged;
+
+        StoryGraphEditorHooks.BeginGraphEdit = undoName => window?.RecordGraphUndo(undoName);
+        StoryGraphEditorHooks.EndGraphEdit = () => window?.SaveGraphAfterEdit();
+
         RegisterCallback<DragUpdatedEvent>(OnDragUpdated, TrickleDown.TrickleDown);
         RegisterCallback<DragPerformEvent>(OnDragPerform, TrickleDown.TrickleDown);
 
@@ -44,10 +49,12 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Start Node", _ => CreateNodeUI<StartNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Play Clip Node", _ => CreateNodeUI<PlayClipNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Play Image Node", _ => CreateNodeUI<PlayImageNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Playback Speed Node", _ => CreateNodeUI<PlaybackSpeedNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Random Branch Node", _ => CreateNodeUI<RandomBranchNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Threshold Branch Node", _ => CreateNodeUI<ThresholdBranchNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Redirect Node", _ => CreateNodeUI<RedirectNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Label Node (行先)", _ =>
             {
@@ -65,7 +72,9 @@ public class StoryGraphView : GraphView
         nodeData.guid = Guid.NewGuid().ToString();
         nodeData.position = position;
         setup?.Invoke(nodeData);
-        return AddNodeFromData(nodeData);
+        StoryNodeUI nodeUI = AddNodeFromData(nodeData);
+        window?.CommitGraphFromView("ノードを作成", true);
+        return nodeUI;
     }
 
     public StoryNodeUI AddNodeFromData(BaseNode nodeData)
@@ -86,6 +95,48 @@ public class StoryGraphView : GraphView
             }
         });
         return compatiblePorts;
+    }
+
+    private GraphViewChange OnGraphViewChanged(GraphViewChange change)
+    {
+        if ((window != null && window.IsApplyingUndo) || StoryGraphEditorHooks.IgnoreGraphViewChange)
+        {
+            return change;
+        }
+
+        bool structural = (change.edgesToCreate != null && change.edgesToCreate.Count > 0)
+            || (change.elementsToRemove != null && change.elementsToRemove.Count > 0)
+            || (change.movedElements != null && change.movedElements.Count > 0);
+        bool moved = change.movedElements != null && change.movedElements.Count > 0;
+        if (moved)
+        {
+            foreach (GraphElement element in change.movedElements)
+            {
+                if (element is not StoryNodeUI nodeUI || nodeUI.data == null) continue;
+                if (nodeUI.TryGetLayoutPosition(out Vector2 livePos))
+                {
+                    nodeUI.data.position = livePos;
+                }
+            }
+        }
+
+        if (structural)
+        {
+            window?.CommitGraphFromView(DescribeGraphChange(change));
+        }
+        return change;
+    }
+
+    private static string DescribeGraphChange(GraphViewChange change)
+    {
+        bool removed = change.elementsToRemove != null && change.elementsToRemove.Count > 0;
+        bool created = change.edgesToCreate != null && change.edgesToCreate.Count > 0;
+        bool moved = change.movedElements != null && change.movedElements.Count > 0;
+
+        if (removed && !created && !moved) return "グラフ要素を削除";
+        if (created && !removed && !moved) return "ノードを接続";
+        if (moved && !removed && !created) return "ノードを移動";
+        return "グラフを編集";
     }
 
     private Vector2 GetGraphPosition(Vector2 localMousePosition)
@@ -324,6 +375,8 @@ public class StoryGraphView : GraphView
                 AddToSelection(edge);
             }
         }
+
+        window?.CommitGraphFromView("ノードを貼り付け", true);
     }
 
     private static bool TryParseClipboard(string data, out ClipboardData clipboard)

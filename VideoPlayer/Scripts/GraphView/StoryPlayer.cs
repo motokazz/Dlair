@@ -34,6 +34,15 @@ public class StoryPlayer : MonoBehaviour
 
     public bool IsInSubGraph => graphStack.Count > 0;
 
+    public BaseNode CurrentNode => currentNode;
+
+    public void ExecuteNode(BaseNode node)
+    {
+        if (node == null) return;
+        currentNode = node;
+        node.Execute(this);
+    }
+
     public BaseNode GetNextNode(string guid, string portName)
     {
         StoryGraph active = ActiveGraph;
@@ -47,7 +56,7 @@ public class StoryPlayer : MonoBehaviour
         BaseNode nextNode = GetNextNode(from.guid, portName);
         if (nextNode != null)
         {
-            nextNode.Execute(this);
+            ExecuteNode(nextNode);
             return;
         }
 
@@ -86,7 +95,7 @@ public class StoryPlayer : MonoBehaviour
         BaseNode startNode = subGraph.nodes != null ? subGraph.nodes.Find(n => n is StartNode) : null;
         if (startNode != null)
         {
-            startNode.Execute(this);
+            ExecuteNode(startNode);
         }
         else
         {
@@ -229,14 +238,14 @@ public class StoryPlayer : MonoBehaviour
 
         if (destGraph == ActiveGraph)
         {
-            destNode.Execute(this);
+            ExecuteNode(destNode);
             return;
         }
 
         if (destGraph == graph)
         {
             graphStack.Clear();
-            destNode.Execute(this);
+            ExecuteNode(destNode);
             return;
         }
 
@@ -253,7 +262,7 @@ public class StoryPlayer : MonoBehaviour
         }
 
         graphStack.Push(new GraphFrame { graph = destGraph, returnNode = returnNode });
-        destNode.Execute(this);
+        ExecuteNode(destNode);
     }
 
     private void StopMediaMonitor()
@@ -312,7 +321,7 @@ public class StoryPlayer : MonoBehaviour
             Debug.LogWarning($"【StoryPlayer】startFromLabel '{startFromLabel}' が見つからないため Start から開始します。");
         }
 
-        if (startNode != null) startNode.Execute(this);
+        if (startNode != null) ExecuteNode(startNode);
     }
 
     public void PlayVideo(VideoClip clip, BaseNode node, bool isLooping = false, float portOutputTime = -1f, AudioClip audioClip = null, float crossFadeDuration = 1.0f)

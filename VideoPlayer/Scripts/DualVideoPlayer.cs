@@ -24,8 +24,16 @@ public class DualVideoPlayer : MonoBehaviour
     [Header("Settings")]
     public AspectMode aspectMode = AspectMode.FitOutside;
 
+    public const float MinPlaybackSpeed = 0f;
+    public const float MaxPlaybackSpeed = 10f;
+
+    [Tooltip("現在の再生速度。1 が等速。ノード操作やクリップ切替でも維持されます。")]
+    [SerializeField]
+    private float playbackSpeed = 1f;
+
     public bool isPlayerA_Active = true;
     public bool IsTransitioning { get; private set; } = false;
+    public float PlaybackSpeed => playbackSpeed;
 
     private Material glMaterial;
     private AudioSource bgmSource1;
@@ -51,6 +59,52 @@ public class DualVideoPlayer : MonoBehaviour
         transitionMaterial.SetTexture("_MainTex", texA);
         transitionMaterial.SetTexture("_SubTex", texB);
         transitionMaterial.SetFloat("_Transition", 1f);
+        ApplyPlaybackSpeedToPlayers();
+    }
+
+    public float ApplyPlaybackSpeedOperation(VariableOperation op, float operand)
+    {
+        float current = playbackSpeed;
+        float result = current;
+
+        switch (op)
+        {
+            case VariableOperation.Set:
+                result = operand;
+                break;
+            case VariableOperation.Add:
+                result = current + operand;
+                break;
+            case VariableOperation.Subtract:
+                result = current - operand;
+                break;
+            case VariableOperation.Multiply:
+                result = current * operand;
+                break;
+            case VariableOperation.Divide:
+                if (operand != 0f) result = current / operand;
+                else Debug.LogWarning("【DualVideoPlayer】再生速度のゼロ除算が試みられました。");
+                break;
+            case VariableOperation.Modulo:
+                if (operand != 0f) result = current % operand;
+                else Debug.LogWarning("【DualVideoPlayer】再生速度のゼロ剰余が試みられました。");
+                break;
+        }
+
+        SetPlaybackSpeed(result);
+        return playbackSpeed;
+    }
+
+    public void SetPlaybackSpeed(float speed)
+    {
+        playbackSpeed = Mathf.Clamp(speed, MinPlaybackSpeed, MaxPlaybackSpeed);
+        ApplyPlaybackSpeedToPlayers();
+    }
+
+    private void ApplyPlaybackSpeedToPlayers()
+    {
+        if (playerA != null) playerA.playbackSpeed = playbackSpeed;
+        if (playerB != null) playerB.playbackSpeed = playbackSpeed;
     }
 
     private void ClearRenderTexture(RenderTexture rt)
@@ -85,6 +139,7 @@ public class DualVideoPlayer : MonoBehaviour
 
         // 4. 最後にRenderTextureを再アタッチ（これで新しい動画の比率として正しく計算される）
         player.targetTexture = targetRT;
+        player.playbackSpeed = playbackSpeed;
     }
 
     private void DrawImageToRenderTexture(Texture2D image, RenderTexture targetRT)
@@ -185,6 +240,7 @@ public class DualVideoPlayer : MonoBehaviour
             while (!playerA.isPrepared) yield return null;
 
             playerA.Play();
+            playerA.playbackSpeed = playbackSpeed;
             yield return WaitAndPreRender(playerA, texA);
         }
 
@@ -246,6 +302,7 @@ public class DualVideoPlayer : MonoBehaviour
             while (!nextPlayer.isPrepared) yield return null;
 
             nextPlayer.Play();
+            nextPlayer.playbackSpeed = playbackSpeed;
             yield return WaitAndPreRender(nextPlayer, targetRT);
         }
 

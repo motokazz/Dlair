@@ -139,6 +139,23 @@ public static class GameManager
         return defaultValue;
     }
 
+    public static bool TryGetNumeric(string key, out float value)
+    {
+        value = 0f;
+        if (string.IsNullOrEmpty(key)) return false;
+        if (floatParams.TryGetValue(key, out float floatValue))
+        {
+            value = floatValue;
+            return true;
+        }
+        if (intParams.TryGetValue(key, out int intValue))
+        {
+            value = intValue;
+            return true;
+        }
+        return false;
+    }
+
     public static void SetFloat(string key, float value)
     {
         if (string.IsNullOrEmpty(key)) return;

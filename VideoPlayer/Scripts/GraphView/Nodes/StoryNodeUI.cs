@@ -1,14 +1,17 @@
+using UnityEditor;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 using UnityEngine.Video;
+using System;
 using System.Collections.Generic;
 
 public class StoryNodeUI : Node
 {
     public string guid;
     public BaseNode data;
+    private bool isExecuting;
 
     public StoryNodeUI(BaseNode nodeData)
     {
@@ -45,6 +48,10 @@ public class StoryNodeUI : Node
         {
             BuildRandomBranchPorts(randomBranchNode);
         }
+        else if (nodeData is ThresholdBranchNode thresholdBranchNode)
+        {
+            BuildThresholdBranchPorts(thresholdBranchNode);
+        }
         else
         {
             Port outputPort = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
@@ -59,11 +66,87 @@ public class StoryNodeUI : Node
         RefreshDynamicTitle();
     }
 
+    public bool TryGetLayoutPosition(out Vector2 position)
+    {
+        Rect rect = GetPosition();
+        position = rect.position;
+
+        if (float.IsNaN(position.x) || float.IsNaN(position.y) ||
+            float.IsInfinity(position.x) || float.IsInfinity(position.y))
+        {
+            position = data != null ? data.position : Vector2.zero;
+            return false;
+        }
+
+        if (panel == null)
+        {
+            return false;
+        }
+
+        // レイアウト前・破棄中はサイズ0で (0,0) を返し、保存すると全ノードが重なる
+        if (rect.width <= 1f && rect.height <= 1f)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void RecordNodeUndo(string undoName = "ノードを編集")
+    {
+        if (data == null) return;
+        Undo.RecordObject(data, undoName);
+    }
+
+    private void BeginGraphEdit(string undoName)
+    {
+        StoryGraphEditorHooks.BeginGraphEdit?.Invoke(undoName);
+    }
+
+    private void EndGraphEdit()
+    {
+        StoryGraphEditorHooks.EndGraphEdit?.Invoke();
+    }
+
+    public void SetExecuting(bool executing)
+    {
+        if (isExecuting == executing) return;
+        isExecuting = executing;
+
+        if (executing)
+        {
+            Color glow = new Color(1f, 0.82f, 0.15f);
+            style.borderTopWidth = 3;
+            style.borderBottomWidth = 3;
+            style.borderLeftWidth = 3;
+            style.borderRightWidth = 3;
+            style.borderTopColor = glow;
+            style.borderBottomColor = glow;
+            style.borderLeftColor = glow;
+            style.borderRightColor = glow;
+        }
+        else
+        {
+            style.borderTopWidth = StyleKeyword.Null;
+            style.borderBottomWidth = StyleKeyword.Null;
+            style.borderLeftWidth = StyleKeyword.Null;
+            style.borderRightWidth = StyleKeyword.Null;
+            style.borderTopColor = StyleKeyword.Null;
+            style.borderBottomColor = StyleKeyword.Null;
+            style.borderLeftColor = StyleKeyword.Null;
+            style.borderRightColor = StyleKeyword.Null;
+        }
+    }
+
     private void RefreshDynamicTitle()
     {
         if (data is VariableOperationNode varOpNode)
         {
             title = varOpNode.GetDisplayTitle();
+        }
+        else if (data is PlaybackSpeedNode speedNode)
+        {
+            title = speedNode.GetDisplayTitle();
         }
         else if (data is ConditionNode conditionNode)
         {
@@ -72,6 +155,10 @@ public class StoryNodeUI : Node
         else if (data is RandomBranchNode randomBranchNode)
         {
             title = randomBranchNode.GetDisplayTitle();
+        }
+        else if (data is ThresholdBranchNode thresholdBranchNode)
+        {
+            title = thresholdBranchNode.GetDisplayTitle();
         }
         else if (data is LabelNode labelNode)
         {
@@ -94,10 +181,20 @@ public class StoryNodeUI : Node
         {
             titleColor = new Color(0.48f, 0.22f, 0.62f);
         }
+        else if (data is PlaybackSpeedNode)
+        {
+            titleColor = new Color(0.18f, 0.42f, 0.58f);
+            style.minWidth = 180;
+        }
         else if (data is RandomBranchNode)
         {
             titleColor = new Color(0.70f, 0.40f, 0.10f);
-            style.minWidth = 240;
+            style.minWidth = 180;
+        }
+        else if (data is ThresholdBranchNode)
+        {
+            titleColor = new Color(0.50f, 0.25f, 0.40f);
+            style.minWidth = 180;
         }
         else if (data is RedirectNode)
         {
@@ -131,7 +228,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is VariableOperationNode || data is RandomBranchNode || data is LabelNode || data is GotoNode)
+        if (data is ConditionNode || data is VariableOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ThresholdBranchNode || data is LabelNode || data is GotoNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -147,6 +244,73 @@ public class StoryNodeUI : Node
         titleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
         titleLabel.style.whiteSpace = WhiteSpace.NoWrap;
         titleLabel.style.overflow = Overflow.Visible;
+    }
+
+    private void AddHelpButton(string helpText)
+    {
+        if (string.IsNullOrEmpty(helpText)) return;
+
+        Label helpLabel = new Label(helpText);
+        helpLabel.style.display = DisplayStyle.None;
+        helpLabel.style.whiteSpace = WhiteSpace.Normal;
+        helpLabel.style.maxWidth = 168;
+        helpLabel.style.color = new StyleColor(new Color(0.82f, 0.82f, 0.82f));
+        helpLabel.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.28f));
+        helpLabel.style.marginTop = 2;
+        helpLabel.style.marginBottom = 4;
+        helpLabel.style.paddingLeft = 6;
+        helpLabel.style.paddingRight = 6;
+        helpLabel.style.paddingTop = 4;
+        helpLabel.style.paddingBottom = 4;
+        helpLabel.style.borderTopLeftRadius = 4;
+        helpLabel.style.borderTopRightRadius = 4;
+        helpLabel.style.borderBottomLeftRadius = 4;
+        helpLabel.style.borderBottomRightRadius = 4;
+
+        Button helpBtn = new Button(() =>
+        {
+            bool shown = helpLabel.style.display == DisplayStyle.Flex;
+            if (shown)
+            {
+                helpLabel.style.display = DisplayStyle.None;
+                return;
+            }
+
+            expanded = true;
+            RefreshExpandedState();
+            helpLabel.style.display = DisplayStyle.Flex;
+        })
+        {
+            text = "？",
+            tooltip = "説明を表示"
+        };
+        helpBtn.style.width = 16;
+        helpBtn.style.minWidth = 16;
+        helpBtn.style.maxWidth = 16;
+        helpBtn.style.height = 16;
+        helpBtn.style.marginLeft = 2;
+        helpBtn.style.marginRight = 2;
+        helpBtn.style.marginTop = 1;
+        helpBtn.style.marginBottom = 1;
+        helpBtn.style.paddingLeft = 0;
+        helpBtn.style.paddingRight = 0;
+        helpBtn.style.paddingTop = 0;
+        helpBtn.style.paddingBottom = 0;
+        helpBtn.style.fontSize = 10;
+        helpBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+        helpBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+        helpBtn.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.14f));
+        helpBtn.style.borderTopWidth = 0;
+        helpBtn.style.borderBottomWidth = 0;
+        helpBtn.style.borderLeftWidth = 0;
+        helpBtn.style.borderRightWidth = 0;
+        helpBtn.style.borderTopLeftRadius = 8;
+        helpBtn.style.borderTopRightRadius = 8;
+        helpBtn.style.borderBottomLeftRadius = 8;
+        helpBtn.style.borderBottomRightRadius = 8;
+
+        titleButtonContainer.Insert(0, helpBtn);
+        extensionContainer.Insert(0, helpLabel);
     }
 
     private void ApplyRedirectNodeStyle()
@@ -247,6 +411,7 @@ public class StoryNodeUI : Node
 
             clipField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playClipNode.clip = evt.newValue as VideoClip;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
             });
@@ -259,6 +424,7 @@ public class StoryNodeUI : Node
             };
             audioField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playClipNode.audioClip = evt.newValue as AudioClip;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
             });
@@ -270,6 +436,7 @@ public class StoryNodeUI : Node
             };
             fadeField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playClipNode.crossFadeDuration = Mathf.Max(0f, evt.newValue);
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
             });
@@ -281,6 +448,7 @@ public class StoryNodeUI : Node
             };
             loopToggle.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playClipNode.isLooping = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
             });
@@ -293,6 +461,7 @@ public class StoryNodeUI : Node
             };
             outputTimeField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playClipNode.portOutputTime = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
             });
@@ -307,6 +476,7 @@ public class StoryNodeUI : Node
             };
             imageField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playImageNode.image = evt.newValue as Texture2D;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
             });
@@ -318,6 +488,7 @@ public class StoryNodeUI : Node
             };
             durationField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playImageNode.duration = Mathf.Max(0f, evt.newValue);
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
             });
@@ -330,6 +501,7 @@ public class StoryNodeUI : Node
             };
             audioField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playImageNode.audioClip = evt.newValue as AudioClip;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
             });
@@ -341,6 +513,7 @@ public class StoryNodeUI : Node
             };
             fadeField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playImageNode.crossFadeDuration = Mathf.Max(0f, evt.newValue);
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
             });
@@ -352,6 +525,7 @@ public class StoryNodeUI : Node
             };
             loopToggle.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playImageNode.isLooping = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
             });
@@ -364,6 +538,7 @@ public class StoryNodeUI : Node
             };
             outputTimeField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 playImageNode.portOutputTime = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
             });
@@ -402,6 +577,7 @@ public class StoryNodeUI : Node
                     return;
                 }
 
+                RecordNodeUndo();
                 subGraphNode.subGraph = assigned;
                 UnityEditor.EditorUtility.SetDirty(subGraphNode);
                 title = subGraphNode.subGraph != null ? subGraphNode.subGraph.name : "SubGraph";
@@ -444,6 +620,7 @@ public class StoryNodeUI : Node
             };
             nameField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 labelNode.labelName = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(labelNode);
                 RefreshDynamicTitle();
@@ -476,6 +653,7 @@ public class StoryNodeUI : Node
             };
             varNameField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 conditionNode.variableName = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(conditionNode);
                 RefreshDynamicTitle();
@@ -485,6 +663,7 @@ public class StoryNodeUI : Node
             EnumField opField = new EnumField("条件", conditionNode.comparison);
             opField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 conditionNode.comparison = (ConditionOperator)evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(conditionNode);
                 RefreshDynamicTitle();
@@ -497,6 +676,7 @@ public class StoryNodeUI : Node
             };
             valField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 conditionNode.compareValue = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(conditionNode);
                 RefreshDynamicTitle();
@@ -514,6 +694,7 @@ public class StoryNodeUI : Node
             };
             varNameField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 varOpNode.variableName = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(varOpNode);
                 RefreshDynamicTitle();
@@ -523,6 +704,7 @@ public class StoryNodeUI : Node
             EnumField opField = new EnumField("演算", varOpNode.operation);
             opField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 varOpNode.operation = (VariableOperation)evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(varOpNode);
                 RefreshDynamicTitle();
@@ -541,6 +723,7 @@ public class StoryNodeUI : Node
             valField.style.display = varOpNode.useVariableOperand ? DisplayStyle.None : DisplayStyle.Flex;
             valField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 varOpNode.operandValue = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(varOpNode);
                 RefreshDynamicTitle();
@@ -553,6 +736,7 @@ public class StoryNodeUI : Node
             operandVarField.style.display = varOpNode.useVariableOperand ? DisplayStyle.Flex : DisplayStyle.None;
             operandVarField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 varOpNode.operandVariableName = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(varOpNode);
                 RefreshDynamicTitle();
@@ -560,10 +744,70 @@ public class StoryNodeUI : Node
 
             useVarToggle.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 varOpNode.useVariableOperand = evt.newValue;
                 valField.style.display = evt.newValue ? DisplayStyle.None : DisplayStyle.Flex;
                 operandVarField.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
                 UnityEditor.EditorUtility.SetDirty(varOpNode);
+                RefreshDynamicTitle();
+            });
+
+            extensionContainer.Add(useVarToggle);
+            extensionContainer.Add(valField);
+            extensionContainer.Add(operandVarField);
+        }
+        else if (data is PlaybackSpeedNode speedNode)
+        {
+            EnumField opField = new EnumField("演算", speedNode.operation);
+            opField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                speedNode.operation = (VariableOperation)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(speedNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(opField);
+
+            Toggle useVarToggle = new Toggle("他の変数値を使用")
+            {
+                value = speedNode.useVariableOperand
+            };
+
+            FloatField valField = new FloatField("数値")
+            {
+                value = speedNode.operandValue,
+                tooltip = "SET: この値にする / ADD: 現在速度に足す（1が等速、範囲 0〜10）"
+            };
+            valField.style.display = speedNode.useVariableOperand ? DisplayStyle.None : DisplayStyle.Flex;
+            valField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                speedNode.operandValue = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(speedNode);
+                RefreshDynamicTitle();
+            });
+
+            TextField operandVarField = new TextField("参照変数")
+            {
+                value = speedNode.operandVariableName,
+                tooltip = "Float または Int の変数名"
+            };
+            operandVarField.style.display = speedNode.useVariableOperand ? DisplayStyle.Flex : DisplayStyle.None;
+            operandVarField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                speedNode.operandVariableName = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(speedNode);
+                RefreshDynamicTitle();
+            });
+
+            useVarToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                speedNode.useVariableOperand = evt.newValue;
+                valField.style.display = evt.newValue ? DisplayStyle.None : DisplayStyle.Flex;
+                operandVarField.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
+                UnityEditor.EditorUtility.SetDirty(speedNode);
                 RefreshDynamicTitle();
             });
 
@@ -583,6 +827,7 @@ public class StoryNodeUI : Node
             };
             prefabField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 choiceNode.branchUIPrefab = evt.newValue as GameObject;
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
             });
@@ -597,6 +842,7 @@ public class StoryNodeUI : Node
                     var buttons = choiceNode.branchUIPrefab.GetComponentsInChildren<UnityEngine.UI.Button>(true);
                     if (buttons.Length > 0)
                     {
+                        BeginGraphEdit("選択肢を自動取得");
                         choiceNode.choices.Clear();
                         foreach (var b in buttons)
                         {
@@ -607,9 +853,8 @@ public class StoryNodeUI : Node
                         }
                         UnityEditor.EditorUtility.SetDirty(choiceNode);
                         BuildChoicePorts(choiceNode);
-                        RefreshExpandedState();
-                        RefreshPorts();
                         RedrawChoiceList(choiceNode, choiceListContainer);
+                        EndGraphEdit();
                     }
                 }
             });
@@ -621,28 +866,20 @@ public class StoryNodeUI : Node
 
             Button addChoiceBtn = new Button(() =>
             {
-                choiceNode.choices.Add($"Choice {choiceNode.choices.Count + 1}");
+                BeginGraphEdit("選択肢を追加");
+                string choiceName = $"Choice {choiceNode.choices.Count + 1}";
+                choiceNode.choices.Add(choiceName);
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
-                BuildChoicePorts(choiceNode);
-                RefreshExpandedState();
-                RefreshPorts();
+                AddOutputPort(choiceName);
                 RedrawChoiceList(choiceNode, choiceListContainer);
+                EndGraphEdit();
             });
             addChoiceBtn.text = "＋ 選択肢(ポート)を追加";
             extensionContainer.Add(addChoiceBtn);
         }
         else if (data is RandomBranchNode randomBranchNode)
         {
-            Label hint = new Label("比率は相対ウェイトです（合計が100でなくても可）")
-            {
-                style =
-                {
-                    color = new StyleColor(new Color(0.75f, 0.75f, 0.75f)),
-                    whiteSpace = WhiteSpace.Normal,
-                    marginBottom = 4
-                }
-            };
-            extensionContainer.Add(hint);
+            AddHelpButton("比率は相対ウェイトです（合計が100でなくても可）");
 
             VisualElement branchListContainer = new VisualElement();
             extensionContainer.Add(branchListContainer);
@@ -650,17 +887,59 @@ public class StoryNodeUI : Node
 
             Button addBranchBtn = new Button(() =>
             {
+                BeginGraphEdit("分岐を追加");
                 EnsureRandomBranches(randomBranchNode);
-                randomBranchNode.branches.Add(new RandomBranchEntry
+                RandomBranchEntry added = new RandomBranchEntry
                 {
                     name = RandomBranchNode.NextDefaultName(randomBranchNode.branches),
                     weight = 1f
-                });
+                };
+                randomBranchNode.branches.Add(added);
                 UnityEditor.EditorUtility.SetDirty(randomBranchNode);
-                BuildRandomBranchPorts(randomBranchNode);
-                RefreshExpandedState();
-                RefreshPorts();
+                AddOutputPort(added.name);
                 RedrawRandomBranchList(randomBranchNode, branchListContainer);
+                EndGraphEdit();
+            })
+            {
+                text = "＋ 分岐を追加"
+            };
+            extensionContainer.Add(addBranchBtn);
+        }
+        else if (data is ThresholdBranchNode thresholdBranchNode)
+        {
+            TextField varNameField = new TextField("変数名")
+            {
+                value = thresholdBranchNode.variableName,
+                tooltip = "判定する数値変数（Int / Float）"
+            };
+            varNameField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                thresholdBranchNode.variableName = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(thresholdBranchNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(varNameField);
+            AddHelpButton("現在値が設定値より大きいときに分岐します。複数該当する場合はいちばん高い設定値へ。どれも超えていなければいちばん小さい設定値の分岐へ。");
+
+            VisualElement branchListContainer = new VisualElement();
+            extensionContainer.Add(branchListContainer);
+            RedrawThresholdBranchList(thresholdBranchNode, branchListContainer);
+
+            Button addBranchBtn = new Button(() =>
+            {
+                BeginGraphEdit("分岐を追加");
+                EnsureThresholdBranches(thresholdBranchNode);
+                ThresholdBranchEntry added = new ThresholdBranchEntry
+                {
+                    name = ThresholdBranchNode.NextDefaultName(thresholdBranchNode.branches),
+                    threshold = ThresholdBranchNode.NextDefaultThreshold(thresholdBranchNode.branches)
+                };
+                thresholdBranchNode.branches.Add(added);
+                UnityEditor.EditorUtility.SetDirty(thresholdBranchNode);
+                AddOutputPort(added.name);
+                RedrawThresholdBranchList(thresholdBranchNode, branchListContainer);
+                EndGraphEdit();
             })
             {
                 text = "＋ 分岐を追加"
@@ -669,20 +948,252 @@ public class StoryNodeUI : Node
         }
     }
 
-    private void BuildChoicePorts(ChoiceNode choiceNode)
+    private Port CreateOutputPort(string portName)
     {
-        outputContainer.Clear();
-        if (choiceNode.choices == null || choiceNode.choices.Count == 0)
+        Port port = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
+        port.portName = portName;
+        return port;
+    }
+
+    private List<Port> GetOutputPorts()
+    {
+        List<Port> ports = new List<Port>();
+        foreach (VisualElement child in outputContainer.Children())
         {
-            choiceNode.choices = new System.Collections.Generic.List<string> { "Choice 1" };
+            if (child is Port port)
+            {
+                ports.Add(port);
+            }
+        }
+        return ports;
+    }
+
+    private void AddOutputPort(string portName, int insertIndex = -1)
+    {
+        Port port = CreateOutputPort(portName);
+        List<Port> current = GetOutputPorts();
+        if (insertIndex < 0 || insertIndex >= current.Count)
+        {
+            outputContainer.Add(port);
+        }
+        else
+        {
+            outputContainer.Insert(outputContainer.IndexOf(current[insertIndex]), port);
         }
 
-        foreach (var choice in choiceNode.choices)
+        RefreshExpandedState();
+        RefreshPorts();
+    }
+
+    private void RemoveOutputPortAt(int index)
+    {
+        List<Port> ports = GetOutputPorts();
+        if (index < 0 || index >= ports.Count) return;
+
+        Port toRemove = ports[index];
+        GraphView view = GetFirstAncestorOfType<GraphView>();
+        if (view != null)
         {
-            Port choicePort = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
-            choicePort.portName = choice;
-            outputContainer.Add(choicePort);
+            List<GraphElement> edges = new List<GraphElement>();
+            foreach (Edge edge in toRemove.connections)
+            {
+                if (edge != null) edges.Add(edge);
+            }
+
+            if (edges.Count > 0)
+            {
+                bool previousIgnore = StoryGraphEditorHooks.IgnoreGraphViewChange;
+                StoryGraphEditorHooks.IgnoreGraphViewChange = true;
+                try
+                {
+                    view.DeleteElements(edges);
+                }
+                finally
+                {
+                    StoryGraphEditorHooks.IgnoreGraphViewChange = previousIgnore;
+                }
+            }
         }
+
+        outputContainer.Remove(toRemove);
+        RefreshExpandedState();
+        RefreshPorts();
+    }
+
+    private void RenameOutputPortAt(int index, string newName)
+    {
+        List<Port> ports = GetOutputPorts();
+        if (index < 0 || index >= ports.Count) return;
+        ports[index].portName = newName;
+        RefreshExpandedState();
+        RefreshPorts();
+    }
+
+    private sealed class OutputConnectionSnap
+    {
+        public string portName;
+        public List<string> targetGuids = new List<string>();
+    }
+
+    private void RebuildOutputPortsPreservingEdges(Action rebuild)
+    {
+        bool previousIgnore = StoryGraphEditorHooks.IgnoreGraphViewChange;
+        StoryGraphEditorHooks.IgnoreGraphViewChange = true;
+        try
+        {
+            List<OutputConnectionSnap> snaps = CaptureOutputConnections();
+            GraphView view = GetFirstAncestorOfType<GraphView>();
+            rebuild();
+            RemoveOrphanedEdges(view);
+            RestoreOutputConnections(view, snaps);
+            RefreshExpandedState();
+            RefreshPorts();
+        }
+        finally
+        {
+            StoryGraphEditorHooks.IgnoreGraphViewChange = previousIgnore;
+        }
+    }
+
+    private List<OutputConnectionSnap> CaptureOutputConnections()
+    {
+        List<OutputConnectionSnap> snaps = new List<OutputConnectionSnap>();
+        foreach (Port port in GetOutputPorts())
+        {
+            OutputConnectionSnap snap = new OutputConnectionSnap { portName = port.portName };
+            foreach (Edge edge in port.connections)
+            {
+                if (edge?.input?.node is StoryNodeUI target && !string.IsNullOrEmpty(target.guid))
+                {
+                    snap.targetGuids.Add(target.guid);
+                }
+            }
+
+            snaps.Add(snap);
+        }
+
+        return snaps;
+    }
+
+    private void RemoveOrphanedEdges(GraphView view)
+    {
+        if (view == null) return;
+
+        List<GraphElement> orphans = new List<GraphElement>();
+        foreach (GraphElement element in view.graphElements)
+        {
+            if (element is not Edge graphEdge) continue;
+            if (graphEdge.output == null || graphEdge.output.node == null || graphEdge.input == null || graphEdge.input.node == null)
+            {
+                orphans.Add(graphEdge);
+            }
+        }
+
+        if (orphans.Count > 0)
+        {
+            bool previousIgnore = StoryGraphEditorHooks.IgnoreGraphViewChange;
+            StoryGraphEditorHooks.IgnoreGraphViewChange = true;
+            try
+            {
+                view.DeleteElements(orphans);
+            }
+            finally
+            {
+                StoryGraphEditorHooks.IgnoreGraphViewChange = previousIgnore;
+            }
+        }
+    }
+
+    private void RestoreOutputConnections(GraphView view, List<OutputConnectionSnap> snaps)
+    {
+        if (view == null || snaps == null || snaps.Count == 0) return;
+
+        Dictionary<string, StoryNodeUI> nodes = new Dictionary<string, StoryNodeUI>();
+        foreach (GraphElement element in view.graphElements)
+        {
+            if (element is not StoryNodeUI nodeUI || string.IsNullOrEmpty(nodeUI.guid) || nodes.ContainsKey(nodeUI.guid)) continue;
+            nodes[nodeUI.guid] = nodeUI;
+        }
+
+        List<Port> newPorts = GetOutputPorts();
+        bool[] snapConsumed = new bool[snaps.Count];
+        bool[] portRestored = new bool[newPorts.Count];
+
+        for (int i = 0; i < newPorts.Count; i++)
+        {
+            for (int s = 0; s < snaps.Count; s++)
+            {
+                if (snapConsumed[s] || snaps[s].portName != newPorts[i].portName) continue;
+                ConnectPortToGuids(view, newPorts[i], snaps[s].targetGuids, nodes);
+                snapConsumed[s] = true;
+                portRestored[i] = true;
+                break;
+            }
+        }
+
+        for (int i = 0; i < newPorts.Count; i++)
+        {
+            if (portRestored[i] || i >= snaps.Count || snapConsumed[i]) continue;
+            ConnectPortToGuids(view, newPorts[i], snaps[i].targetGuids, nodes);
+            snapConsumed[i] = true;
+        }
+    }
+
+    private static void ConnectPortToGuids(GraphView view, Port outputPort, List<string> targetGuids, Dictionary<string, StoryNodeUI> nodes)
+    {
+        if (view == null || outputPort == null || targetGuids == null) return;
+
+        for (int i = 0; i < targetGuids.Count; i++)
+        {
+            if (!nodes.TryGetValue(targetGuids[i], out StoryNodeUI target)) continue;
+
+            Port input = null;
+            foreach (VisualElement child in target.inputContainer.Children())
+            {
+                if (child is Port port)
+                {
+                    input = port;
+                    break;
+                }
+            }
+
+            if (input == null) continue;
+
+            bool alreadyConnected = false;
+            foreach (Edge existing in outputPort.connections)
+            {
+                if (existing != null && existing.input == input)
+                {
+                    alreadyConnected = true;
+                    break;
+                }
+            }
+
+            if (alreadyConnected) continue;
+
+            Edge created = outputPort.ConnectTo(input);
+            if (created != null)
+            {
+                view.AddElement(created);
+            }
+        }
+    }
+
+    private void BuildChoicePorts(ChoiceNode choiceNode)
+    {
+        RebuildOutputPortsPreservingEdges(() =>
+        {
+            outputContainer.Clear();
+            if (choiceNode.choices == null || choiceNode.choices.Count == 0)
+            {
+                choiceNode.choices = new List<string> { "Choice 1" };
+            }
+
+            foreach (var choice in choiceNode.choices)
+            {
+                outputContainer.Add(CreateOutputPort(choice));
+            }
+        });
     }
 
     private void RedrawChoiceList(ChoiceNode choiceNode, VisualElement container)
@@ -702,11 +1213,11 @@ public class StoryNodeUI : Node
             tf.style.flexGrow = 1;
             tf.RegisterValueChangedCallback(evt =>
             {
+                BeginGraphEdit("選択肢名を変更");
                 choiceNode.choices[index] = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
-                BuildChoicePorts(choiceNode);
-                RefreshExpandedState();
-                RefreshPorts();
+                RenameOutputPortAt(index, evt.newValue);
+                EndGraphEdit();
             });
             row.Add(tf);
 
@@ -714,12 +1225,12 @@ public class StoryNodeUI : Node
             {
                 Button delBtn = new Button(() =>
                 {
+                    BeginGraphEdit("選択肢を削除");
                     choiceNode.choices.RemoveAt(index);
                     UnityEditor.EditorUtility.SetDirty(choiceNode);
-                    BuildChoicePorts(choiceNode);
-                    RefreshExpandedState();
-                    RefreshPorts();
+                    RemoveOutputPortAt(index);
                     RedrawChoiceList(choiceNode, container);
+                    EndGraphEdit();
                 })
                 {
                     text = "✕"
@@ -734,27 +1245,30 @@ public class StoryNodeUI : Node
 
     private void BuildRandomBranchPorts(RandomBranchNode node)
     {
-        outputContainer.Clear();
-        EnsureRandomBranches(node);
-
-        for (int i = 0; i < node.branches.Count; i++)
+        RebuildOutputPortsPreservingEdges(() =>
         {
-            RandomBranchEntry entry = node.branches[i];
-            if (entry == null)
-            {
-                entry = new RandomBranchEntry { name = RandomBranchNode.NextDefaultName(node.branches), weight = 1f };
-                node.branches[i] = entry;
-            }
+            outputContainer.Clear();
+            EnsureRandomBranches(node);
 
-            if (string.IsNullOrEmpty(entry.name))
+            for (int i = 0; i < node.branches.Count; i++)
             {
-                entry.name = RandomBranchNode.NextDefaultName(node.branches);
-            }
+                RandomBranchEntry entry = node.branches[i];
+                if (entry == null)
+                {
+                    entry = new RandomBranchEntry { name = RandomBranchNode.NextDefaultName(node.branches), weight = 1f };
+                    node.branches[i] = entry;
+                }
 
-            Port branchPort = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
-            branchPort.portName = entry.name;
-            outputContainer.Add(branchPort);
-        }
+                if (string.IsNullOrEmpty(entry.name))
+                {
+                    entry.name = RandomBranchNode.NextDefaultName(node.branches);
+                }
+
+                Port branchPort = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
+                branchPort.portName = entry.name;
+                outputContainer.Add(branchPort);
+            }
+        });
     }
 
     private void RedrawRandomBranchList(RandomBranchNode node, VisualElement container)
@@ -828,11 +1342,11 @@ public class StoryNodeUI : Node
             nameField.style.minWidth = 60;
             nameField.RegisterValueChangedCallback(evt =>
             {
+                BeginGraphEdit("分岐名を変更");
                 entry.name = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(node);
-                BuildRandomBranchPorts(node);
-                RefreshExpandedState();
-                RefreshPorts();
+                RenameOutputPortAt(index, evt.newValue);
+                EndGraphEdit();
             });
             row.Add(nameField);
 
@@ -844,6 +1358,7 @@ public class StoryNodeUI : Node
             weightField.style.width = 56;
             weightField.RegisterValueChangedCallback(evt =>
             {
+                RecordNodeUndo();
                 entry.weight = Mathf.Max(0f, evt.newValue);
                 if (!Mathf.Approximately(weightField.value, entry.weight))
                 {
@@ -865,12 +1380,12 @@ public class StoryNodeUI : Node
             {
                 Button delBtn = new Button(() =>
                 {
+                    BeginGraphEdit("分岐を削除");
                     node.branches.RemoveAt(index);
                     UnityEditor.EditorUtility.SetDirty(node);
-                    BuildRandomBranchPorts(node);
-                    RefreshExpandedState();
-                    RefreshPorts();
+                    RemoveOutputPortAt(index);
                     RedrawRandomBranchList(node, container);
+                    EndGraphEdit();
                 })
                 {
                     text = "✕"
@@ -893,6 +1408,154 @@ public class StoryNodeUI : Node
             {
                 new RandomBranchEntry { name = "A", weight = 1f },
                 new RandomBranchEntry { name = "B", weight = 1f }
+            };
+        }
+    }
+
+    private void BuildThresholdBranchPorts(ThresholdBranchNode node)
+    {
+        RebuildOutputPortsPreservingEdges(() =>
+        {
+            outputContainer.Clear();
+            EnsureThresholdBranches(node);
+
+            for (int i = 0; i < node.branches.Count; i++)
+            {
+                ThresholdBranchEntry entry = node.branches[i];
+                if (entry == null)
+                {
+                    entry = new ThresholdBranchEntry
+                    {
+                        name = ThresholdBranchNode.NextDefaultName(node.branches),
+                        threshold = 0f
+                    };
+                    node.branches[i] = entry;
+                }
+
+                if (string.IsNullOrEmpty(entry.name))
+                {
+                    entry.name = ThresholdBranchNode.NextDefaultName(node.branches);
+                }
+
+                outputContainer.Add(CreateOutputPort(entry.name));
+            }
+        });
+    }
+
+    private void RedrawThresholdBranchList(ThresholdBranchNode node, VisualElement container)
+    {
+        container.Clear();
+        EnsureThresholdBranches(node);
+
+        VisualElement header = new VisualElement();
+        header.style.flexDirection = FlexDirection.Row;
+        header.style.alignItems = Align.Center;
+        header.style.marginBottom = 2;
+
+        Label nameHeader = new Label("名前");
+        nameHeader.style.flexGrow = 1;
+        nameHeader.style.minWidth = 60;
+        nameHeader.style.color = new StyleColor(new Color(0.7f, 0.7f, 0.7f));
+        header.Add(nameHeader);
+
+        Label thresholdHeader = new Label("設定値");
+        thresholdHeader.style.width = 72;
+        thresholdHeader.style.color = new StyleColor(new Color(0.7f, 0.7f, 0.7f));
+        header.Add(thresholdHeader);
+
+        VisualElement headerSpacer = new VisualElement();
+        headerSpacer.style.width = node.branches.Count > 1 ? 25 : 0;
+        header.Add(headerSpacer);
+        container.Add(header);
+
+        for (int i = 0; i < node.branches.Count; i++)
+        {
+            int index = i;
+            ThresholdBranchEntry entry = node.branches[index];
+            if (entry == null)
+            {
+                entry = new ThresholdBranchEntry
+                {
+                    name = ThresholdBranchNode.NextDefaultName(node.branches),
+                    threshold = 0f
+                };
+                node.branches[index] = entry;
+            }
+
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 2;
+
+            TextField nameField = new TextField
+            {
+                value = entry.name
+            };
+            nameField.style.flexGrow = 1;
+            nameField.style.minWidth = 60;
+            nameField.RegisterValueChangedCallback(evt =>
+            {
+                BeginGraphEdit("分岐名を変更");
+                string nextName = evt.newValue;
+                if (string.IsNullOrEmpty(nextName))
+                {
+                    nextName = ThresholdBranchNode.NextDefaultName(node.branches);
+                    nameField.SetValueWithoutNotify(nextName);
+                }
+
+                entry.name = nextName;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RenameOutputPortAt(index, nextName);
+                RefreshDynamicTitle();
+                EndGraphEdit();
+            });
+            row.Add(nameField);
+
+            FloatField thresholdField = new FloatField
+            {
+                value = entry.threshold,
+                tooltip = "この値より大きいときに、この分岐の候補になります"
+            };
+            thresholdField.style.width = 72;
+            thresholdField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.threshold = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+            });
+            row.Add(thresholdField);
+
+            if (node.branches.Count > 1)
+            {
+                Button delBtn = new Button(() =>
+                {
+                    BeginGraphEdit("分岐を削除");
+                    node.branches.RemoveAt(index);
+                    UnityEditor.EditorUtility.SetDirty(node);
+                    RemoveOutputPortAt(index);
+                    RedrawThresholdBranchList(node, container);
+                    EndGraphEdit();
+                })
+                {
+                    text = "✕"
+                };
+                delBtn.style.width = 25;
+                row.Add(delBtn);
+            }
+
+            container.Add(row);
+        }
+    }
+
+    private static void EnsureThresholdBranches(ThresholdBranchNode node)
+    {
+        if (node.branches == null || node.branches.Count == 0)
+        {
+            node.branches = new System.Collections.Generic.List<ThresholdBranchEntry>
+            {
+                new ThresholdBranchEntry { name = "A", threshold = 0f },
+                new ThresholdBranchEntry { name = "B", threshold = 10f }
             };
         }
     }
@@ -969,7 +1632,8 @@ public class StoryNodeUI : Node
         }
 
         dropdown.RegisterValueChangedCallback(evt =>
-        {
+            {
+                RecordNodeUndo();
             LabelOption picked = options.Find(o => o.display == evt.newValue);
             if (picked == null || string.IsNullOrEmpty(picked.labelGuid))
             {
