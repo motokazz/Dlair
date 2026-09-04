@@ -46,23 +46,28 @@ public class StoryGraphView : GraphView
         {
             Vector2 graphPos = GetGraphPosition(menuEvent.localMousePosition);
 
-            menuEvent.menu.AppendAction("Create/Start Node", _ => CreateNodeUI<StartNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Play Clip Node", _ => CreateNodeUI<PlayClipNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Play Image Node", _ => CreateNodeUI<PlayImageNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Playback Speed Node", _ => CreateNodeUI<PlaybackSpeedNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Random Branch Node", _ => CreateNodeUI<RandomBranchNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Threshold Branch Node", _ => CreateNodeUI<ThresholdBranchNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Redirect Node", _ => CreateNodeUI<RedirectNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Label Node (行先)", _ =>
+            menuEvent.menu.AppendAction("Create/Flow/Start Node", _ => CreateNodeUI<StartNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Redirect Node", _ => CreateNodeUI<RedirectNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Label Node (行先)", _ =>
             {
                 CreateNodeUI<LabelNode>(graphPos, node => node.labelName = GetNextLabelName());
             });
-            menuEvent.menu.AppendAction("Create/Goto Node", _ => CreateNodeUI<GotoNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Sub Graph Node", _ => CreateNodeUI<SubGraphNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Exit Node", _ => CreateNodeUI<ExitNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Goto Node", _ => CreateNodeUI<GotoNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Sub Graph Node", _ => CreateNodeUI<SubGraphNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Exit Node", _ => CreateNodeUI<ExitNode>(graphPos));
+
+            menuEvent.menu.AppendAction("Create/Media/Play Clip Node", _ => CreateNodeUI<PlayClipNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Media/Play Image Node", _ => CreateNodeUI<PlayImageNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Media/Playback Speed Node", _ => CreateNodeUI<PlaybackSpeedNode>(graphPos));
+
+            menuEvent.menu.AppendAction("Create/Variable/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Random Branch Node", _ => CreateNodeUI<RandomBranchNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Threshold Branch Node", _ => CreateNodeUI<ThresholdBranchNode>(graphPos));
+
+            menuEvent.menu.AppendAction("Create/UI/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/UI/Text Node", _ => CreateNodeUI<TextNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Spawn/Prefab Node", _ => CreateNodeUI<SpawnPrefabNode>(graphPos));
         }));
     }
 

@@ -168,6 +168,14 @@ public class StoryNodeUI : Node
         {
             title = gotoNode.GetDisplayTitle();
         }
+        else if (data is TextNode textNode)
+        {
+            title = textNode.GetDisplayTitle();
+        }
+        else if (data is SpawnPrefabNode spawnNode)
+        {
+            title = spawnNode.GetDisplayTitle();
+        }
     }
 
     private void ApplyNodeStyle()
@@ -215,6 +223,16 @@ public class StoryNodeUI : Node
             titleColor = new Color(0.58f, 0.42f, 0.12f);
             style.minWidth = 240;
         }
+        else if (data is TextNode)
+        {
+            titleColor = new Color(0.18f, 0.40f, 0.52f);
+            style.minWidth = 220;
+        }
+        else if (data is SpawnPrefabNode)
+        {
+            titleColor = new Color(0.62f, 0.32f, 0.18f);
+            style.minWidth = 200;
+        }
         else if (data is ExitNode)
         {
             titleColor = new Color(0.55f, 0.22f, 0.22f);
@@ -228,7 +246,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is VariableOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ThresholdBranchNode || data is LabelNode || data is GotoNode)
+        if (data is ConditionNode || data is VariableOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ThresholdBranchNode || data is LabelNode || data is GotoNode || data is TextNode || data is SpawnPrefabNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -876,6 +894,137 @@ public class StoryNodeUI : Node
             });
             addChoiceBtn.text = "＋ 選択肢(ポート)を追加";
             extensionContainer.Add(addChoiceBtn);
+        }
+        else if (data is TextNode textNode)
+        {
+            ObjectField prefabField = new ObjectField("UI Prefab")
+            {
+                objectType = typeof(GameObject),
+                value = textNode.textUIPrefab,
+                tooltip = "TypewriterEffect 付きのプレハブを指定します"
+            };
+            prefabField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.textUIPrefab = evt.newValue as GameObject;
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(prefabField);
+
+            TextField messageField = new TextField("本文")
+            {
+                value = textNode.message,
+                multiline = true
+            };
+            messageField.style.minHeight = 64;
+            messageField.style.whiteSpace = WhiteSpace.Normal;
+            messageField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.message = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(textNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(messageField);
+
+            Toggle waitToggle = new Toggle("Typewriter 終了待ち")
+            {
+                value = textNode.waitUntilComplete,
+                tooltip = "オン: 全文表示後のクリックで Next / オフ: 表示開始と同時に Next"
+            };
+            Toggle skipToggle = new Toggle("入力中クリックでスキップ")
+            {
+                value = textNode.clickToSkip,
+                tooltip = "入力中のクリックは全文表示のみ。進むのは全文が出てからのクリック"
+            };
+            skipToggle.style.display = textNode.waitUntilComplete ? DisplayStyle.Flex : DisplayStyle.None;
+
+            waitToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.waitUntilComplete = evt.newValue;
+                skipToggle.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(waitToggle);
+
+            skipToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.clickToSkip = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(skipToggle);
+
+            Toggle destroyToggle = new Toggle("終了後にUIを破棄")
+            {
+                value = textNode.autoDestroyUI,
+                tooltip = "終了待ちがオンのとき、クリックで進んだあとにプレハブを破棄します"
+            };
+            destroyToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.autoDestroyUI = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(destroyToggle);
+        }
+        else if (data is SpawnPrefabNode spawnNode)
+        {
+            AddHelpButton("Choice などの出力からつなぐと、クリック位置にプレハブを出します。破棄はプレハブ側の AutoRelease が担当します。");
+
+            ObjectField prefabField = new ObjectField("Prefab")
+            {
+                objectType = typeof(GameObject),
+                value = spawnNode.prefab
+            };
+            prefabField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                spawnNode.prefab = evt.newValue as GameObject;
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(prefabField);
+
+            Toggle pointerToggle = new Toggle("ポインタ位置に出す")
+            {
+                value = spawnNode.spawnAtPointer,
+                tooltip = "Choice / Text のクリック位置など、いまのポインタ座標に生成します"
+            };
+            pointerToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                spawnNode.spawnAtPointer = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+            });
+            extensionContainer.Add(pointerToggle);
+
+            Toggle canvasToggle = new Toggle("Canvas 配下に出す")
+            {
+                value = spawnNode.parentToCanvas,
+                tooltip = "オン: UI / オフ: ワールド座標"
+            };
+            canvasToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                spawnNode.parentToCanvas = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+            });
+            extensionContainer.Add(canvasToggle);
+
+            FloatField distanceField = new FloatField("ワールド距離")
+            {
+                value = spawnNode.worldDistance,
+                tooltip = "Canvas 配下がオフのとき、カメラからこの距離に出します"
+            };
+            distanceField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                spawnNode.worldDistance = Mathf.Max(0.01f, evt.newValue);
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+            });
+            extensionContainer.Add(distanceField);
         }
         else if (data is RandomBranchNode randomBranchNode)
         {

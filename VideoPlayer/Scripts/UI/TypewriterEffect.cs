@@ -18,6 +18,8 @@ public class TypewriterEffect : MonoBehaviour
     private string currentFullText;
     private Action currentCallback;
 
+    public bool IsPlaying => typingCoroutine != null;
+
     // ==========================================
     // ★追加：コンポーネントが取得できているか確実にチェックする処理
     // ==========================================
