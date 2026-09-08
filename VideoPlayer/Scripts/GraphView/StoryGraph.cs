@@ -7,6 +7,9 @@ public class StoryGraph : ScriptableObject
     public List<BaseNode> nodes = new List<BaseNode>();
     public List<StoryLinkData> links = new List<StoryLinkData>();
 
+    [HideInInspector]
+    public string assetIdentity;
+
     public BaseNode GetNextNode(string currentGuid, string portName)
     {
         foreach (var link in links)

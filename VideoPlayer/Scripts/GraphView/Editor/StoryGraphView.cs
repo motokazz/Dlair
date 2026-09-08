@@ -10,10 +10,12 @@ public class StoryGraphView : GraphView
 {
     private const string ClipboardMarker = "StoryGraphClipboard:";
     private const float PasteOffset = 40f;
+    private const float PasteViewMargin = 48f;
 
     private StoryGraphWindow window;
     private string lastPasteData;
     private int pasteCount;
+    private Vector2 lastPointerPosition;
 
     public StoryGraph CurrentGraph => window != null ? window.currentGraph : null;
 
@@ -28,7 +30,12 @@ public class StoryGraphView : GraphView
         this.style.backgroundColor = new StyleColor(new Color(0.15f, 0.15f, 0.15f));
 
         focusable = true;
-        RegisterCallback<PointerDownEvent>(_ => Focus());
+        RegisterCallback<PointerMoveEvent>(evt => lastPointerPosition = evt.position);
+        RegisterCallback<PointerDownEvent>(evt =>
+        {
+            lastPointerPosition = evt.position;
+            Focus();
+        });
 
         serializeGraphElements = SerializeGraph;
         unserializeAndPaste = UnserializeAndPaste;
@@ -63,7 +70,7 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Variable/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Random Branch Node", _ => CreateNodeUI<RandomBranchNode>(graphPos));
-            menuEvent.menu.AppendAction("Create/Variable/Threshold Branch Node", _ => CreateNodeUI<ThresholdBranchNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Condition Branch Node", _ => CreateNodeUI<ConditionBranchNode>(graphPos));
 
             menuEvent.menu.AppendAction("Create/UI/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
             menuEvent.menu.AppendAction("Create/UI/Text Node", _ => CreateNodeUI<TextNode>(graphPos));
@@ -310,6 +317,7 @@ public class StoryGraphView : GraphView
                 lastPasteData = data;
             }
             offset *= pasteCount;
+            offset = AdjustPasteOffsetIntoView(clipboard, offset);
         }
 
         Dictionary<string, string> guidMap = new Dictionary<string, string>();
@@ -384,6 +392,114 @@ public class StoryGraphView : GraphView
         window?.CommitGraphFromView("ノードを貼り付け", true);
     }
 
+    private Vector2 AdjustPasteOffsetIntoView(ClipboardData clipboard, Vector2 offset)
+    {
+        if (!TryGetClipboardBounds(clipboard, out Rect sourceBounds))
+        {
+            return offset;
+        }
+
+        Rect viewRect = GetVisibleGraphRect();
+        if (viewRect.width < 1f || viewRect.height < 1f)
+        {
+            return offset;
+        }
+
+        if (WouldPasteBeVisible(clipboard, offset, viewRect))
+        {
+            return offset;
+        }
+
+        Rect paddedView = ShrinkRect(viewRect, PasteViewMargin);
+        Vector2 target = GetPreferredPasteAnchor(paddedView);
+        Vector2 viewOffset = target - sourceBounds.center + offset;
+
+        Rect pastedBounds = sourceBounds;
+        pastedBounds.position += viewOffset;
+        if (pastedBounds.width <= paddedView.width && pastedBounds.height <= paddedView.height)
+        {
+            float clampedX = Mathf.Clamp(pastedBounds.xMin, paddedView.xMin, paddedView.xMax - pastedBounds.width);
+            float clampedY = Mathf.Clamp(pastedBounds.yMin, paddedView.yMin, paddedView.yMax - pastedBounds.height);
+            viewOffset += new Vector2(clampedX - pastedBounds.xMin, clampedY - pastedBounds.yMin);
+        }
+
+        return viewOffset;
+    }
+
+    private static bool WouldPasteBeVisible(ClipboardData clipboard, Vector2 offset, Rect viewRect)
+    {
+        foreach (ClipboardNode item in clipboard.nodes)
+        {
+            if (viewRect.Contains(item.position + offset))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Vector2 GetPreferredPasteAnchor(Rect viewRect)
+    {
+        if (worldBound.Contains(lastPointerPosition))
+        {
+            Vector2 mouseGraph = contentViewContainer.WorldToLocal(lastPointerPosition);
+            if (viewRect.Contains(mouseGraph))
+            {
+                return mouseGraph;
+            }
+        }
+
+        return viewRect.center;
+    }
+
+    private Rect GetVisibleGraphRect()
+    {
+        Rect world = worldBound;
+        Vector2 min = contentViewContainer.WorldToLocal(new Vector2(world.xMin, world.yMin));
+        Vector2 max = contentViewContainer.WorldToLocal(new Vector2(world.xMax, world.yMax));
+        return Rect.MinMaxRect(
+            Mathf.Min(min.x, max.x),
+            Mathf.Min(min.y, max.y),
+            Mathf.Max(min.x, max.x),
+            Mathf.Max(min.y, max.y));
+    }
+
+    private static Rect ShrinkRect(Rect rect, float margin)
+    {
+        if (rect.width <= margin * 2f || rect.height <= margin * 2f)
+        {
+            return rect;
+        }
+
+        return Rect.MinMaxRect(rect.xMin + margin, rect.yMin + margin, rect.xMax - margin, rect.yMax - margin);
+    }
+
+    private static bool TryGetClipboardBounds(ClipboardData clipboard, out Rect bounds)
+    {
+        bounds = default;
+        if (clipboard.nodes == null || clipboard.nodes.Count == 0)
+        {
+            return false;
+        }
+
+        float xMin = float.MaxValue;
+        float yMin = float.MaxValue;
+        float xMax = float.MinValue;
+        float yMax = float.MinValue;
+        foreach (ClipboardNode item in clipboard.nodes)
+        {
+            Vector2 position = item.position;
+            xMin = Mathf.Min(xMin, position.x);
+            yMin = Mathf.Min(yMin, position.y);
+            xMax = Mathf.Max(xMax, position.x);
+            yMax = Mathf.Max(yMax, position.y);
+        }
+
+        bounds = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        return true;
+    }
+
     private static bool TryParseClipboard(string data, out ClipboardData clipboard)
     {
         clipboard = null;
@@ -412,11 +528,19 @@ public class StoryGraphView : GraphView
             {
                 type = typeof(BaseNode).Assembly.GetType(item.typeName);
             }
+            if (type == null && item.typeName.IndexOf("ThresholdBranchNode", StringComparison.Ordinal) >= 0)
+            {
+                type = typeof(ConditionBranchNode);
+            }
         }
 
         if (type == null && !string.IsNullOrEmpty(item.className))
         {
             type = typeof(BaseNode).Assembly.GetType(item.className);
+            if (type == null && item.className == "ThresholdBranchNode")
+            {
+                type = typeof(ConditionBranchNode);
+            }
         }
 
         return type;

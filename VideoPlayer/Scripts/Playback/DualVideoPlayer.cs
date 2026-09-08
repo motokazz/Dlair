@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.Video;
 
 public class DualVideoPlayer : MonoBehaviour
@@ -21,6 +22,9 @@ public class DualVideoPlayer : MonoBehaviour
     [Header("Transition Material")]
     public Material transitionMaterial;
 
+    [Tooltip("映像を表示している RawImage。DualVideoPlayer のマテリアル差し替えを画面側にも反映します。")]
+    public RawImage displayImage;
+
     [Header("Settings")]
     public AspectMode aspectMode = AspectMode.FitOutside;
 
@@ -36,9 +40,21 @@ public class DualVideoPlayer : MonoBehaviour
     public float PlaybackSpeed => playbackSpeed;
 
     private Material glMaterial;
+    private Material runtimeMaterial;
     private AudioSource bgmSource1;
     private AudioSource bgmSource2;
     private AudioSource currentBgmSource;
+
+    private Material ActiveMaterial => runtimeMaterial != null ? runtimeMaterial : transitionMaterial;
+
+    private void Awake()
+    {
+        if (transitionMaterial != null)
+            runtimeMaterial = new Material(transitionMaterial);
+
+        ResolveDisplayImage();
+        ApplyMaterialToDisplay();
+    }
 
     private void Start()
     {
@@ -56,10 +72,74 @@ public class DualVideoPlayer : MonoBehaviour
         ClearRenderTexture(texA);
         ClearRenderTexture(texB);
         isPlayerA_Active = true;
-        transitionMaterial.SetTexture("_MainTex", texA);
-        transitionMaterial.SetTexture("_SubTex", texB);
-        transitionMaterial.SetFloat("_Transition", 1f);
+        BindTransitionTextures();
+        SetTransitionFloat("_Transition", 1f);
         ApplyPlaybackSpeedToPlayers();
+    }
+
+    private void OnDestroy()
+    {
+        if (runtimeMaterial == null) return;
+
+        if (displayImage != null && displayImage.material == runtimeMaterial)
+            displayImage.material = transitionMaterial;
+
+        Destroy(runtimeMaterial);
+        runtimeMaterial = null;
+    }
+
+    private void ResolveDisplayImage()
+    {
+        if (displayImage != null) return;
+
+        RawImage[] images = FindObjectsByType<RawImage>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (transitionMaterial != null)
+        {
+            for (int i = 0; i < images.Length; i++)
+            {
+                if (images[i] != null && images[i].material == transitionMaterial)
+                {
+                    displayImage = images[i];
+                    return;
+                }
+            }
+        }
+
+        if (images.Length == 1)
+            displayImage = images[0];
+        else if (images.Length == 0)
+            Debug.LogWarning("【DualVideoPlayer】表示用 RawImage が見つかりません。transitionMaterial を差し替えても画面に反映されません。");
+        else
+            Debug.LogWarning("【DualVideoPlayer】表示用 RawImage が複数あります。Inspector の Display Image を指定してください。");
+    }
+
+    private void ApplyMaterialToDisplay()
+    {
+        Material mat = ActiveMaterial;
+        if (displayImage == null || mat == null) return;
+
+        displayImage.material = mat;
+        displayImage.texture = null;
+    }
+
+    private void BindTransitionTextures()
+    {
+        Material mat = ActiveMaterial;
+        if (mat == null) return;
+        mat.SetTexture("_MainTex", texA);
+        mat.SetTexture("_SubTex", texB);
+    }
+
+    private void SetTransitionFloat(string property, float value)
+    {
+        Material mat = ActiveMaterial;
+        if (mat != null) mat.SetFloat(property, value);
+    }
+
+    private float GetTransitionFloat(string property)
+    {
+        Material mat = ActiveMaterial;
+        return mat != null ? mat.GetFloat(property) : 0f;
     }
 
     public float ApplyPlaybackSpeedOperation(VariableOperation op, float operand)
@@ -185,7 +265,7 @@ public class DualVideoPlayer : MonoBehaviour
     public IEnumerator WarmUpDecoder(VideoClip dummyClip)
     {
         IsTransitioning = true;
-        transitionMaterial.SetFloat("_GlobalAlpha", 0f);
+        SetTransitionFloat("_GlobalAlpha", 0f);
 
         SetupVideoPlayer(playerA, texA, dummyClip, false);
 
@@ -203,7 +283,7 @@ public class DualVideoPlayer : MonoBehaviour
         ClearRenderTexture(texB);
 
         isPlayerA_Active = false;
-        transitionMaterial.SetFloat("_Transition", 1f);
+        SetTransitionFloat("_Transition", 1f);
         IsTransitioning = false;
     }
 
@@ -220,8 +300,8 @@ public class DualVideoPlayer : MonoBehaviour
         ClearRenderTexture(texA);
         ClearRenderTexture(texB);
 
-        transitionMaterial.SetTexture("_SubTex", texB);
-        transitionMaterial.SetFloat("_Transition", 1f);
+        BindTransitionTextures();
+        SetTransitionFloat("_Transition", 1f);
 
         currentBgmSource.Stop();
         if (bgmClip != null) { currentBgmSource.clip = bgmClip; currentBgmSource.loop = isLooping; currentBgmSource.volume = 1f; currentBgmSource.Play(); }
@@ -250,13 +330,13 @@ public class DualVideoPlayer : MonoBehaviour
         {
             time += Time.unscaledDeltaTime;
             float t = Mathf.Clamp01(time / fadeInDuration);
-            transitionMaterial.SetFloat("_Transition", Mathf.Lerp(1f, 0f, t));
-            if (transitionMaterial.GetFloat("_GlobalAlpha") < 1.0f) transitionMaterial.SetFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
+            SetTransitionFloat("_Transition", Mathf.Lerp(1f, 0f, t));
+            if (GetTransitionFloat("_GlobalAlpha") < 1.0f) SetTransitionFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
             yield return null;
         }
 
-        transitionMaterial.SetFloat("_Transition", 0f);
-        transitionMaterial.SetFloat("_GlobalAlpha", 1.0f);
+        SetTransitionFloat("_Transition", 0f);
+        SetTransitionFloat("_GlobalAlpha", 1.0f);
         IsTransitioning = false;
     }
 
@@ -314,14 +394,14 @@ public class DualVideoPlayer : MonoBehaviour
         {
             time += Time.unscaledDeltaTime;
             float t = (fadeDuration > 0f) ? Mathf.Clamp01(time / fadeDuration) : 1f;
-            transitionMaterial.SetFloat("_Transition", Mathf.Lerp(startValue, endValue, t));
-            if (transitionMaterial.GetFloat("_GlobalAlpha") < 1.0f) transitionMaterial.SetFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
+            SetTransitionFloat("_Transition", Mathf.Lerp(startValue, endValue, t));
+            if (GetTransitionFloat("_GlobalAlpha") < 1.0f) SetTransitionFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
             if (!keepSameBgm) { if (nextBgm != null) fadingInBgmSource.volume = t; if (fadingOutBgmSource.isPlaying) fadingOutBgmSource.volume = 1f - t; }
             yield return null;
         }
 
-        transitionMaterial.SetFloat("_Transition", endValue);
-        transitionMaterial.SetFloat("_GlobalAlpha", 1.0f);
+        SetTransitionFloat("_Transition", endValue);
+        SetTransitionFloat("_GlobalAlpha", 1.0f);
         if (!keepSameBgm) { if (nextBgm != null) fadingInBgmSource.volume = 1f; fadingOutBgmSource.Stop(); currentBgmSource = fadingInBgmSource; }
 
         activePlayer.Stop();

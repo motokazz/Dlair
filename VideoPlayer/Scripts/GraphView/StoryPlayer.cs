@@ -110,7 +110,24 @@ public class StoryPlayer : MonoBehaviour
 
         GraphFrame frame = graphStack.Pop();
         currentNode = frame.returnNode;
-        ContinueTo(frame.returnNode, "Next");
+
+        if (TryContinueFrom(frame.returnNode))
+        {
+            return;
+        }
+
+        if (TryResumeOwnerFlow(frame.graph))
+        {
+            return;
+        }
+
+        if (graphStack.Count > 0)
+        {
+            ExitSubGraph();
+            return;
+        }
+
+        Debug.Log("【進行終了】Exit ノードに到達しました。");
     }
 
     public void ExitSubGraphOrEnd()
@@ -158,9 +175,16 @@ public class StoryPlayer : MonoBehaviour
 
         Debug.Log($"【Goto】'{label.GetDisplayName()}' へジャンプ ({(owner != null ? owner.name : "?")})");
         gotoDepth++;
-        StopMediaMonitor();
-        ClearRuntimePrefabs();
-        EnterGraphAtNode(owner, label, fromGoto);
+        try
+        {
+            StopMediaMonitor();
+            ClearRuntimePrefabs();
+            EnterGraphAtNode(owner, label, fromGoto);
+        }
+        finally
+        {
+            gotoDepth--;
+        }
     }
 
     public bool PlayFromLabel(string labelName)
@@ -249,6 +273,30 @@ public class StoryPlayer : MonoBehaviour
             return;
         }
 
+        // 0600 → 0630 → 0600 のように、すでに積んであるグラフへ戻るときはネストせず巻き戻す
+        if (TryUnwindToGraph(destGraph))
+        {
+            ExecuteNode(destNode);
+            return;
+        }
+
+        if (TryFindOwnerSubGraphNode(destGraph, out BaseNode ownerNode, out int framesToPop))
+        {
+            for (int i = 0; i < framesToPop; i++)
+            {
+                if (graphStack.Count == 0) break;
+                graphStack.Pop();
+            }
+
+            returnNode = ownerNode;
+        }
+        else if (graphStack.Count > 0)
+        {
+            // SubGraph 関係のない章どうしの Goto は呼び出しではなくジャンプとして差し替える
+            GraphFrame current = graphStack.Pop();
+            returnNode = current.returnNode;
+        }
+
         if (IsGraphInCallStack(destGraph))
         {
             Debug.LogError($"【Goto】すでに '{destGraph.name}' の実行中です。");
@@ -263,6 +311,103 @@ public class StoryPlayer : MonoBehaviour
 
         graphStack.Push(new GraphFrame { graph = destGraph, returnNode = returnNode });
         ExecuteNode(destNode);
+    }
+
+    private bool TryUnwindToGraph(StoryGraph destGraph)
+    {
+        if (destGraph == null || graphStack.Count == 0) return false;
+
+        int framesToPop = -1;
+        GraphFrame[] frames = graphStack.ToArray();
+        for (int i = 0; i < frames.Length; i++)
+        {
+            if (frames[i].graph != destGraph) continue;
+            framesToPop = i;
+            break;
+        }
+
+        if (framesToPop < 0) return false;
+
+        for (int i = 0; i < framesToPop; i++)
+        {
+            if (graphStack.Count == 0) break;
+            graphStack.Pop();
+        }
+
+        return ActiveGraph == destGraph;
+    }
+
+    private bool TryContinueFrom(BaseNode from)
+    {
+        if (from == null) return false;
+
+        BaseNode nextNode = GetNextNode(from.guid, "Next");
+        if (nextNode == null) return false;
+
+        ExecuteNode(nextNode);
+        return true;
+    }
+
+    private bool TryResumeOwnerFlow(StoryGraph exitedGraph)
+    {
+        if (exitedGraph == null) return false;
+
+        while (true)
+        {
+            BaseNode ownerNode = FindDirectSubGraphNode(ActiveGraph, exitedGraph);
+            if (ownerNode != null)
+            {
+                return TryContinueFrom(ownerNode);
+            }
+
+            if (graphStack.Count == 0)
+            {
+                return false;
+            }
+
+            graphStack.Pop();
+        }
+    }
+
+    private bool TryFindOwnerSubGraphNode(StoryGraph destGraph, out BaseNode ownerNode, out int framesToPop)
+    {
+        ownerNode = null;
+        framesToPop = 0;
+        if (destGraph == null) return false;
+
+        ownerNode = FindDirectSubGraphNode(ActiveGraph, destGraph);
+        if (ownerNode != null)
+        {
+            return true;
+        }
+
+        GraphFrame[] frames = graphStack.ToArray();
+        for (int i = 0; i < frames.Length; i++)
+        {
+            StoryGraph parent = (i + 1 < frames.Length) ? frames[i + 1].graph : graph;
+            ownerNode = FindDirectSubGraphNode(parent, destGraph);
+            if (ownerNode == null) continue;
+
+            framesToPop = i + 1;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static BaseNode FindDirectSubGraphNode(StoryGraph owner, StoryGraph nested)
+    {
+        if (owner == null || nested == null || owner.nodes == null) return null;
+
+        for (int i = 0; i < owner.nodes.Count; i++)
+        {
+            if (owner.nodes[i] is SubGraphNode subGraphNode && subGraphNode.subGraph == nested)
+            {
+                return subGraphNode;
+            }
+        }
+
+        return null;
     }
 
     private void StopMediaMonitor()

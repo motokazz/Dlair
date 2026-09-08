@@ -88,6 +88,8 @@ public class StoryGotoPanel : MonoBehaviour
         {
             if (instances[i] != null) instances[i].RefreshDisplay();
         }
+
+        StoryLabelTreePanel.RefreshAll();
     }
 
     public static bool IsUnlocked(string labelName)

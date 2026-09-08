@@ -7,14 +7,12 @@ Shader "Custom/VideoTransition"
         _RuleTex ("Rule Texture (Grayscale)", 2D) = "white" {}
         _Transition ("Transition (0 to 1)", Range(0, 1)) = 0
         _Smoothness ("Smoothness", Range(0, 1)) = 0.1
-        
-        // ★追加：全体を透明にするためのマスターアルファ値 (0=透明, 1=不透明)
-        _GlobalAlpha ("Global Alpha", Range(0, 1)) = 1 
+        _RuleAmount ("Rule Amount (0=Fade, 1=Wipe)", Range(0, 1)) = 0
+        _GlobalAlpha ("Global Alpha", Range(0, 1)) = 1
     }
     SubShader
     {
         Tags { "Queue"="Transparent" "RenderType"="Transparent" "IgnoreProjector"="True" }
-        // アルファブレンドを有効にする
         Blend SrcAlpha OneMinusSrcAlpha
 
         Pass
@@ -41,7 +39,8 @@ Shader "Custom/VideoTransition"
             sampler2D _RuleTex;
             float _Transition;
             float _Smoothness;
-            float _GlobalAlpha; // ★追加
+            float _RuleAmount;
+            float _GlobalAlpha;
 
             v2f vert (appdata v)
             {
@@ -55,15 +54,13 @@ Shader "Custom/VideoTransition"
             {
                 fixed4 colA = tex2D(_MainTex, i.uv);
                 fixed4 colB = tex2D(_SubTex, i.uv);
+                float fadeMask = 1.0 - saturate(_Transition);
                 float rule = tex2D(_RuleTex, i.uv).r;
-
                 float t = _Transition * (1.0 + _Smoothness * 2.0) - _Smoothness;
-                float mask = smoothstep(t - _Smoothness, t + _Smoothness, rule);
+                float ruleMask = smoothstep(t - _Smoothness, t + _Smoothness, rule);
+                float mask = lerp(fadeMask, ruleMask, saturate(_RuleAmount));
 
-                // AとBをブレンド
                 fixed4 finalColor = lerp(colB, colA, mask);
-                
-                // ★追加：マスターアルファを乗算して透明度を制御
                 finalColor.a *= _GlobalAlpha;
 
                 return finalColor;

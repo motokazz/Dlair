@@ -12,6 +12,8 @@ public class StoryNodeUI : Node
     public string guid;
     public BaseNode data;
     private bool isExecuting;
+    private Image mediaThumbnail;
+    private IVisualElementScheduledItem mediaPreviewRetry;
 
     public StoryNodeUI(BaseNode nodeData)
     {
@@ -48,9 +50,9 @@ public class StoryNodeUI : Node
         {
             BuildRandomBranchPorts(randomBranchNode);
         }
-        else if (nodeData is ThresholdBranchNode thresholdBranchNode)
+        else if (nodeData is ConditionBranchNode conditionBranchNode)
         {
-            BuildThresholdBranchPorts(thresholdBranchNode);
+            BuildConditionBranchPorts(conditionBranchNode);
         }
         else
         {
@@ -64,6 +66,7 @@ public class StoryNodeUI : Node
         RefreshPorts();
         ApplyNodeStyle();
         RefreshDynamicTitle();
+        AttachMediaThumbnail();
     }
 
     public bool TryGetLayoutPosition(out Vector2 position)
@@ -156,9 +159,9 @@ public class StoryNodeUI : Node
         {
             title = randomBranchNode.GetDisplayTitle();
         }
-        else if (data is ThresholdBranchNode thresholdBranchNode)
+        else if (data is ConditionBranchNode conditionBranchNode)
         {
-            title = thresholdBranchNode.GetDisplayTitle();
+            title = conditionBranchNode.GetDisplayTitle();
         }
         else if (data is LabelNode labelNode)
         {
@@ -199,7 +202,7 @@ public class StoryNodeUI : Node
             titleColor = new Color(0.70f, 0.40f, 0.10f);
             style.minWidth = 180;
         }
-        else if (data is ThresholdBranchNode)
+        else if (data is ConditionBranchNode)
         {
             titleColor = new Color(0.50f, 0.25f, 0.40f);
             style.minWidth = 180;
@@ -246,7 +249,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is VariableOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ThresholdBranchNode || data is LabelNode || data is GotoNode || data is TextNode || data is SpawnPrefabNode)
+        if (data is ConditionNode || data is VariableOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is TextNode || data is SpawnPrefabNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -264,9 +267,9 @@ public class StoryNodeUI : Node
         titleLabel.style.overflow = Overflow.Visible;
     }
 
-    private void AddHelpButton(string helpText)
+    private Label AddHelpButton(string helpText)
     {
-        if (string.IsNullOrEmpty(helpText)) return;
+        if (string.IsNullOrEmpty(helpText)) return null;
 
         Label helpLabel = new Label(helpText);
         helpLabel.style.display = DisplayStyle.None;
@@ -329,6 +332,7 @@ public class StoryNodeUI : Node
 
         titleButtonContainer.Insert(0, helpBtn);
         extensionContainer.Insert(0, helpLabel);
+        return helpLabel;
     }
 
     private void ApplyRedirectNodeStyle()
@@ -432,6 +436,7 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 playClipNode.clip = evt.newValue as VideoClip;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
+                RefreshMediaThumbnail();
             });
             extensionContainer.Add(clipField);
 
@@ -497,6 +502,7 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 playImageNode.image = evt.newValue as Texture2D;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
+                RefreshMediaThumbnail();
             });
             extensionContainer.Add(imageField);
 
@@ -1054,40 +1060,53 @@ public class StoryNodeUI : Node
             };
             extensionContainer.Add(addBranchBtn);
         }
-        else if (data is ThresholdBranchNode thresholdBranchNode)
+        else if (data is ConditionBranchNode conditionBranchNode)
         {
             TextField varNameField = new TextField("変数名")
             {
-                value = thresholdBranchNode.variableName,
+                value = conditionBranchNode.variableName,
                 tooltip = "判定する数値変数（Int / Float）"
             };
             varNameField.RegisterValueChangedCallback(evt =>
             {
                 RecordNodeUndo();
-                thresholdBranchNode.variableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(thresholdBranchNode);
+                conditionBranchNode.variableName = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(conditionBranchNode);
                 RefreshDynamicTitle();
             });
             extensionContainer.Add(varNameField);
-            AddHelpButton("現在値が設定値より大きいときに分岐します。複数該当する場合はいちばん高い設定値へ。どれも超えていなければいちばん小さい設定値の分岐へ。");
 
             VisualElement branchListContainer = new VisualElement();
+            DropdownField opField = new DropdownField("比較", ThresholdOperatorChoices, ClampOperatorSymbol(conditionBranchNode.comparison));
+            opField.tooltip = "現在値と設定値の比較演算子";
+            Label helpLabel = AddHelpButton(conditionBranchNode.GetHelpText());
+            opField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                conditionBranchNode.comparison = OperatorFromSymbol(evt.newValue);
+                UnityEditor.EditorUtility.SetDirty(conditionBranchNode);
+                if (helpLabel != null) helpLabel.text = conditionBranchNode.GetHelpText();
+                RefreshDynamicTitle();
+                RedrawConditionBranchList(conditionBranchNode, branchListContainer);
+            });
+            extensionContainer.Add(opField);
+
             extensionContainer.Add(branchListContainer);
-            RedrawThresholdBranchList(thresholdBranchNode, branchListContainer);
+            RedrawConditionBranchList(conditionBranchNode, branchListContainer);
 
             Button addBranchBtn = new Button(() =>
             {
                 BeginGraphEdit("分岐を追加");
-                EnsureThresholdBranches(thresholdBranchNode);
-                ThresholdBranchEntry added = new ThresholdBranchEntry
+                EnsureConditionBranches(conditionBranchNode);
+                ConditionBranchEntry added = new ConditionBranchEntry
                 {
-                    name = ThresholdBranchNode.NextDefaultName(thresholdBranchNode.branches),
-                    threshold = ThresholdBranchNode.NextDefaultThreshold(thresholdBranchNode.branches)
+                    name = ConditionBranchNode.NextDefaultName(conditionBranchNode.branches),
+                    threshold = ConditionBranchNode.NextDefaultThreshold(conditionBranchNode.branches)
                 };
-                thresholdBranchNode.branches.Add(added);
-                UnityEditor.EditorUtility.SetDirty(thresholdBranchNode);
+                conditionBranchNode.branches.Add(added);
+                UnityEditor.EditorUtility.SetDirty(conditionBranchNode);
                 AddOutputPort(added.name);
-                RedrawThresholdBranchList(thresholdBranchNode, branchListContainer);
+                RedrawConditionBranchList(conditionBranchNode, branchListContainer);
                 EndGraphEdit();
             })
             {
@@ -1561,21 +1580,21 @@ public class StoryNodeUI : Node
         }
     }
 
-    private void BuildThresholdBranchPorts(ThresholdBranchNode node)
+    private void BuildConditionBranchPorts(ConditionBranchNode node)
     {
         RebuildOutputPortsPreservingEdges(() =>
         {
             outputContainer.Clear();
-            EnsureThresholdBranches(node);
+            EnsureConditionBranches(node);
 
             for (int i = 0; i < node.branches.Count; i++)
             {
-                ThresholdBranchEntry entry = node.branches[i];
+                ConditionBranchEntry entry = node.branches[i];
                 if (entry == null)
                 {
-                    entry = new ThresholdBranchEntry
+                    entry = new ConditionBranchEntry
                     {
-                        name = ThresholdBranchNode.NextDefaultName(node.branches),
+                        name = ConditionBranchNode.NextDefaultName(node.branches),
                         threshold = 0f
                     };
                     node.branches[i] = entry;
@@ -1583,7 +1602,7 @@ public class StoryNodeUI : Node
 
                 if (string.IsNullOrEmpty(entry.name))
                 {
-                    entry.name = ThresholdBranchNode.NextDefaultName(node.branches);
+                    entry.name = ConditionBranchNode.NextDefaultName(node.branches);
                 }
 
                 outputContainer.Add(CreateOutputPort(entry.name));
@@ -1591,10 +1610,10 @@ public class StoryNodeUI : Node
         });
     }
 
-    private void RedrawThresholdBranchList(ThresholdBranchNode node, VisualElement container)
+    private void RedrawConditionBranchList(ConditionBranchNode node, VisualElement container)
     {
         container.Clear();
-        EnsureThresholdBranches(node);
+        EnsureConditionBranches(node);
 
         VisualElement header = new VisualElement();
         header.style.flexDirection = FlexDirection.Row;
@@ -1620,12 +1639,12 @@ public class StoryNodeUI : Node
         for (int i = 0; i < node.branches.Count; i++)
         {
             int index = i;
-            ThresholdBranchEntry entry = node.branches[index];
+            ConditionBranchEntry entry = node.branches[index];
             if (entry == null)
             {
-                entry = new ThresholdBranchEntry
+                entry = new ConditionBranchEntry
                 {
-                    name = ThresholdBranchNode.NextDefaultName(node.branches),
+                    name = ConditionBranchNode.NextDefaultName(node.branches),
                     threshold = 0f
                 };
                 node.branches[index] = entry;
@@ -1648,7 +1667,7 @@ public class StoryNodeUI : Node
                 string nextName = evt.newValue;
                 if (string.IsNullOrEmpty(nextName))
                 {
-                    nextName = ThresholdBranchNode.NextDefaultName(node.branches);
+                    nextName = ConditionBranchNode.NextDefaultName(node.branches);
                     nameField.SetValueWithoutNotify(nextName);
                 }
 
@@ -1663,7 +1682,7 @@ public class StoryNodeUI : Node
             FloatField thresholdField = new FloatField
             {
                 value = entry.threshold,
-                tooltip = "この値より大きいときに、この分岐の候補になります"
+                tooltip = node.GetThresholdTooltip()
             };
             thresholdField.style.width = 72;
             thresholdField.RegisterValueChangedCallback(evt =>
@@ -1683,7 +1702,7 @@ public class StoryNodeUI : Node
                     node.branches.RemoveAt(index);
                     UnityEditor.EditorUtility.SetDirty(node);
                     RemoveOutputPortAt(index);
-                    RedrawThresholdBranchList(node, container);
+                    RedrawConditionBranchList(node, container);
                     EndGraphEdit();
                 })
                 {
@@ -1697,14 +1716,34 @@ public class StoryNodeUI : Node
         }
     }
 
-    private static void EnsureThresholdBranches(ThresholdBranchNode node)
+    private static readonly List<string> ThresholdOperatorChoices = new List<string> { "==", ">", ">=", "<=", "<" };
+
+    private static string ClampOperatorSymbol(ConditionOperator op)
+    {
+        string symbol = ConditionNode.GetOperatorSymbol(op);
+        return ThresholdOperatorChoices.Contains(symbol) ? symbol : ">";
+    }
+
+    private static ConditionOperator OperatorFromSymbol(string symbol)
+    {
+        switch (symbol)
+        {
+            case "==": return ConditionOperator.Equal;
+            case ">=": return ConditionOperator.GreaterOrEqual;
+            case "<=": return ConditionOperator.LessOrEqual;
+            case "<": return ConditionOperator.LessThan;
+            default: return ConditionOperator.GreaterThan;
+        }
+    }
+
+    private static void EnsureConditionBranches(ConditionBranchNode node)
     {
         if (node.branches == null || node.branches.Count == 0)
         {
-            node.branches = new System.Collections.Generic.List<ThresholdBranchEntry>
+            node.branches = new System.Collections.Generic.List<ConditionBranchEntry>
             {
-                new ThresholdBranchEntry { name = "A", threshold = 0f },
-                new ThresholdBranchEntry { name = "B", threshold = 10f }
+                new ConditionBranchEntry { name = "A", threshold = 0f },
+                new ConditionBranchEntry { name = "B", threshold = 1f }
             };
         }
     }
@@ -1830,7 +1869,7 @@ public class StoryNodeUI : Node
             foreach (GraphElement element in view.graphElements)
             {
                 if (element is not StoryNodeUI nodeUI || nodeUI.data is not LabelNode label) continue;
-                if (string.IsNullOrEmpty(label.guid) || !seen.Add(label.guid)) continue;
+                if (string.IsNullOrEmpty(label.guid) || !seen.Add(MakeLabelKey(currentGraph, label.guid))) continue;
 
                 options.Add(new LabelOption
                 {
@@ -1852,7 +1891,7 @@ public class StoryNodeUI : Node
             for (int n = 0; n < graphAsset.nodes.Count; n++)
             {
                 if (graphAsset.nodes[n] is not LabelNode label) continue;
-                if (string.IsNullOrEmpty(label.guid) || !seen.Add(label.guid)) continue;
+                if (string.IsNullOrEmpty(label.guid) || !seen.Add(MakeLabelKey(graphAsset, label.guid))) continue;
 
                 options.Add(new LabelOption
                 {
@@ -1862,6 +1901,18 @@ public class StoryNodeUI : Node
                 });
             }
         }
+    }
+
+    private static string MakeLabelKey(StoryGraph graph, string labelGuid)
+    {
+        string graphId = "none";
+        if (graph != null)
+        {
+            string path = UnityEditor.AssetDatabase.GetAssetPath(graph);
+            graphId = !string.IsNullOrEmpty(path) ? path : graph.name;
+        }
+
+        return graphId + ":" + labelGuid;
     }
 
     private StoryGraph ResolveOwnerGraph()
@@ -1877,6 +1928,33 @@ public class StoryNodeUI : Node
         return string.IsNullOrEmpty(path)
             ? null
             : UnityEditor.AssetDatabase.LoadAssetAtPath<StoryGraph>(path);
+    }
+
+    private void AttachMediaThumbnail()
+    {
+        if (data is not PlayClipNode && data is not PlayImageNode) return;
+
+        mediaThumbnail = StoryMediaPreview.CreateImage();
+        titleContainer.Insert(0, mediaThumbnail);
+        titleContainer.style.alignItems = Align.Center;
+        style.minWidth = 200;
+        RegisterCallback<DetachFromPanelEvent>(_ => StoryMediaPreview.Cancel(ref mediaPreviewRetry));
+        RefreshMediaThumbnail();
+    }
+
+    private void RefreshMediaThumbnail()
+    {
+        if (mediaThumbnail == null) return;
+
+        StoryMediaPreview.Cancel(ref mediaPreviewRetry);
+        mediaPreviewRetry = StoryMediaPreview.Bind(mediaThumbnail, GetMediaAsset());
+    }
+
+    private UnityEngine.Object GetMediaAsset()
+    {
+        if (data is PlayClipNode playClipNode) return playClipNode.clip;
+        if (data is PlayImageNode playImageNode) return playImageNode.image;
+        return null;
     }
 
     private class LabelOption
