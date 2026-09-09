@@ -18,7 +18,9 @@ public class ConditionNode : BaseNode
 
     public override void Execute(StoryPlayer player)
     {
-        int currentValue = GameManager.GetParameter(variableName);
+        int currentValue = GameManager.HasBool(variableName)
+            ? (GameManager.GetBool(variableName) ? 1 : 0)
+            : GameManager.GetParameter(variableName);
         bool isTrue = EvaluateCondition(currentValue, comparison, compareValue);
 
         Debug.Log($"【Condition Node】条件判定: {variableName}(現在値: {currentValue}) {GetOperatorSymbol(comparison)} {compareValue} => 結果: {isTrue}");

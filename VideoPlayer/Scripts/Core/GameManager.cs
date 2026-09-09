@@ -125,11 +125,22 @@ public static class GameManager
         return defaultValue;
     }
 
+    public static bool HasBool(string key)
+    {
+        return !string.IsNullOrEmpty(key) && boolParams.ContainsKey(key);
+    }
+
     public static void SetBool(string key, bool value)
     {
         if (string.IsNullOrEmpty(key)) return;
         boolParams[key] = value;
+        Debug.Log($"【GameManager】 '{key}' を {(value ? "On" : "Off")} に設定しました。");
         OnVariableChanged?.Invoke(key);
+    }
+
+    public static void ToggleBool(string key)
+    {
+        SetBool(key, !GetBool(key));
     }
 
     public static float GetFloat(string key, float defaultValue = 0f)
@@ -151,6 +162,11 @@ public static class GameManager
         if (intParams.TryGetValue(key, out int intValue))
         {
             value = intValue;
+            return true;
+        }
+        if (boolParams.TryGetValue(key, out bool boolValue))
+        {
+            value = boolValue ? 1f : 0f;
             return true;
         }
         return false;

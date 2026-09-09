@@ -23,7 +23,7 @@ public class StoryGraphView : GraphView
     {
         this.window = window;
         Insert(0, new GridBackground());
-        this.AddManipulator(new ContentZoomer());
+        SetupZoom(0.1f, 4f);
         this.AddManipulator(new ContentDragger());
         this.AddManipulator(new SelectionDragger());
         this.AddManipulator(new RectangleSelector());
@@ -42,6 +42,9 @@ public class StoryGraphView : GraphView
         canPasteSerializedData = CanPaste;
 
         graphViewChanged = OnGraphViewChanged;
+        elementsAddedToGroup = (_, __) => NotifyAnnotationChanged("グループを更新");
+        elementsRemovedFromGroup = (_, __) => NotifyAnnotationChanged("グループを更新");
+        groupTitleChanged = (_, __) => NotifyAnnotationChanged("グループ名を変更");
 
         StoryGraphEditorHooks.BeginGraphEdit = undoName => window?.RecordGraphUndo(undoName);
         StoryGraphEditorHooks.EndGraphEdit = () => window?.SaveGraphAfterEdit();
@@ -68,6 +71,7 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Media/Playback Speed Node", _ => CreateNodeUI<PlaybackSpeedNode>(graphPos));
 
             menuEvent.menu.AppendAction("Create/Variable/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Bool Operation Node", _ => CreateNodeUI<BoolOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Random Branch Node", _ => CreateNodeUI<RandomBranchNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Branch Node", _ => CreateNodeUI<ConditionBranchNode>(graphPos));
@@ -75,6 +79,14 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/UI/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
             menuEvent.menu.AppendAction("Create/UI/Text Node", _ => CreateNodeUI<TextNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Spawn/Prefab Node", _ => CreateNodeUI<SpawnPrefabNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Memo", _ => CreateStickyNote(graphPos));
+            menuEvent.menu.AppendSeparator();
+            menuEvent.menu.AppendAction("Group Selection", _ => GroupSelection(), _ => CanGroupSelection()
+                ? DropdownMenuAction.Status.Normal
+                : DropdownMenuAction.Status.Disabled);
+            menuEvent.menu.AppendAction("Ungroup", _ => UngroupSelection(), _ => CanUngroupSelection()
+                ? DropdownMenuAction.Status.Normal
+                : DropdownMenuAction.Status.Disabled);
         }));
     }
 
@@ -87,6 +99,257 @@ public class StoryGraphView : GraphView
         StoryNodeUI nodeUI = AddNodeFromData(nodeData);
         window?.CommitGraphFromView("ノードを作成", true);
         return nodeUI;
+    }
+
+    public StoryStickyNote CreateStickyNote(Vector2 position)
+    {
+        StoryStickyNoteData data = new StoryStickyNoteData
+        {
+            guid = Guid.NewGuid().ToString(),
+            title = "Memo",
+            contents = "",
+            position = new Rect(position, StickyNote.defaultSize),
+            fontSize = (int)StickyNoteFontSize.Medium
+        };
+        StoryStickyNote note = AddStickyNote(data);
+        window?.CommitGraphFromView("メモを作成", true);
+        return note;
+    }
+
+    public void RestoreAnnotations(StoryGraph graph, Dictionary<string, StoryNodeUI> nodes)
+    {
+        if (graph == null) return;
+
+        Dictionary<string, StoryStickyNote> stickies = new Dictionary<string, StoryStickyNote>();
+        if (graph.stickyNotes != null)
+        {
+            for (int i = 0; i < graph.stickyNotes.Count; i++)
+            {
+                StoryStickyNoteData data = graph.stickyNotes[i];
+                if (data == null) continue;
+                StoryStickyNote note = AddStickyNote(data);
+                if (!string.IsNullOrEmpty(note.guid))
+                {
+                    stickies[note.guid] = note;
+                }
+            }
+        }
+
+        if (graph.groups == null) return;
+        for (int i = 0; i < graph.groups.Count; i++)
+        {
+            RestoreGroup(graph.groups[i], nodes, stickies);
+        }
+    }
+
+    public void WriteAnnotationsTo(StoryGraph graph)
+    {
+        if (graph == null) return;
+
+        if (graph.stickyNotes == null) graph.stickyNotes = new List<StoryStickyNoteData>();
+        if (graph.groups == null) graph.groups = new List<StoryGroupData>();
+        graph.stickyNotes.Clear();
+        graph.groups.Clear();
+
+        foreach (GraphElement element in graphElements)
+        {
+            if (element is StoryStickyNote note)
+            {
+                graph.stickyNotes.Add(CollectStickyNote(note));
+            }
+            else if (element is StoryGraphGroup group)
+            {
+                graph.groups.Add(CollectGroup(group));
+            }
+        }
+    }
+
+    private StoryStickyNote AddStickyNote(StoryStickyNoteData data)
+    {
+        StoryStickyNote note = new StoryStickyNote();
+        note.guid = string.IsNullOrEmpty(data.guid) ? Guid.NewGuid().ToString() : data.guid;
+        note.title = string.IsNullOrEmpty(data.title) ? "Memo" : data.title;
+        note.contents = data.contents ?? "";
+        Rect rect = data.position;
+        if (rect.width < 8f) rect.width = StickyNote.defaultSize.x;
+        if (rect.height < 8f) rect.height = StickyNote.defaultSize.y;
+        note.SetPosition(rect);
+        note.fontSize = (StickyNoteFontSize)data.fontSize;
+        note.theme = (StickyNoteTheme)data.theme;
+        note.Changed = () => NotifyAnnotationChanged("メモを編集");
+        AddElement(note);
+        return note;
+    }
+
+    private void RestoreGroup(StoryGroupData data, Dictionary<string, StoryNodeUI> nodes, Dictionary<string, StoryStickyNote> stickies)
+    {
+        if (data == null) return;
+
+        StoryGraphGroup group = new StoryGraphGroup();
+        group.guid = string.IsNullOrEmpty(data.guid) ? Guid.NewGuid().ToString() : data.guid;
+        group.title = string.IsNullOrEmpty(data.title) ? "Group" : data.title;
+        Rect rect = data.position;
+        if (rect.width < 8f) rect.width = 220f;
+        if (rect.height < 8f) rect.height = 140f;
+        group.SetPosition(rect);
+        AddElement(group);
+
+        if (data.nodeGuids != null && nodes != null)
+        {
+            for (int i = 0; i < data.nodeGuids.Count; i++)
+            {
+                if (nodes.TryGetValue(data.nodeGuids[i], out StoryNodeUI nodeUI))
+                {
+                    group.AddElement(nodeUI);
+                }
+            }
+        }
+
+        if (data.stickyNoteGuids != null && stickies != null)
+        {
+            for (int i = 0; i < data.stickyNoteGuids.Count; i++)
+            {
+                if (stickies.TryGetValue(data.stickyNoteGuids[i], out StoryStickyNote note))
+                {
+                    group.AddElement(note);
+                }
+            }
+        }
+    }
+
+    private void GroupSelection()
+    {
+        List<GraphElement> members = new List<GraphElement>();
+        foreach (ISelectable selectable in selection)
+        {
+            if (selectable is StoryNodeUI || selectable is StoryStickyNote)
+            {
+                members.Add((GraphElement)selectable);
+            }
+        }
+
+        if (members.Count == 0) return;
+
+        StoryGraphGroup group = new StoryGraphGroup();
+        group.guid = Guid.NewGuid().ToString();
+        group.title = "Group";
+        AddElement(group);
+        foreach (GraphElement member in members)
+        {
+            group.AddElement(member);
+        }
+
+        window?.CommitGraphFromView("グループを作成", true);
+    }
+
+    private void UngroupSelection()
+    {
+        HashSet<Group> groups = new HashSet<Group>();
+        foreach (ISelectable selectable in selection)
+        {
+            if (selectable is Group selectedGroup)
+            {
+                groups.Add(selectedGroup);
+                continue;
+            }
+
+            if (selectable is GraphElement element)
+            {
+                Scope scope = element.GetFirstAncestorOfType<Scope>();
+                if (scope is Group parentGroup)
+                {
+                    groups.Add(parentGroup);
+                }
+            }
+        }
+
+        foreach (Group group in groups)
+        {
+            List<GraphElement> members = new List<GraphElement>(group.containedElements);
+            foreach (GraphElement member in members)
+            {
+                group.RemoveElement(member);
+            }
+            RemoveElement(group);
+        }
+
+        window?.CommitGraphFromView("グループ解除", true);
+    }
+
+    private bool CanGroupSelection()
+    {
+        foreach (ISelectable selectable in selection)
+        {
+            if (selectable is StoryNodeUI || selectable is StoryStickyNote)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool CanUngroupSelection()
+    {
+        foreach (ISelectable selectable in selection)
+        {
+            if (selectable is Group) return true;
+            if (selectable is GraphElement element && element.GetFirstAncestorOfType<Scope>() is Group)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private StoryStickyNoteData CollectStickyNote(StoryStickyNote note)
+    {
+        return new StoryStickyNoteData
+        {
+            guid = note.guid,
+            title = note.title,
+            contents = note.contents,
+            position = GetElementGraphRect(note),
+            fontSize = (int)note.fontSize,
+            theme = (int)note.theme
+        };
+    }
+
+    private StoryGroupData CollectGroup(StoryGraphGroup group)
+    {
+        StoryGroupData data = new StoryGroupData
+        {
+            guid = group.guid,
+            title = group.title,
+            position = GetElementGraphRect(group)
+        };
+
+        foreach (GraphElement contained in group.containedElements)
+        {
+            if (contained is StoryNodeUI nodeUI && !string.IsNullOrEmpty(nodeUI.guid))
+            {
+                data.nodeGuids.Add(nodeUI.guid);
+            }
+            else if (contained is StoryStickyNote note && !string.IsNullOrEmpty(note.guid))
+            {
+                data.stickyNoteGuids.Add(note.guid);
+            }
+        }
+
+        return data;
+    }
+
+    private Rect GetElementGraphRect(GraphElement element)
+    {
+        Rect rect = element.GetPosition();
+        if (element.GetFirstAncestorOfType<Scope>() == null)
+        {
+            return rect;
+        }
+
+        Vector2 graphPos = contentViewContainer.WorldToLocal(element.worldBound.position);
+        return new Rect(graphPos, rect.size);
     }
 
     public StoryNodeUI AddNodeFromData(BaseNode nodeData)
@@ -116,6 +379,8 @@ public class StoryGraphView : GraphView
             return change;
         }
 
+        KeepGroupedNodesWhenDeletingGroup(change);
+
         bool structural = (change.edgesToCreate != null && change.edgesToCreate.Count > 0)
             || (change.elementsToRemove != null && change.elementsToRemove.Count > 0)
             || (change.movedElements != null && change.movedElements.Count > 0);
@@ -137,6 +402,43 @@ public class StoryGraphView : GraphView
             window?.CommitGraphFromView(DescribeGraphChange(change));
         }
         return change;
+    }
+
+    private static void KeepGroupedNodesWhenDeletingGroup(GraphViewChange change)
+    {
+        if (change.elementsToRemove == null || change.elementsToRemove.Count == 0) return;
+
+        HashSet<GraphElement> keep = new HashSet<GraphElement>();
+        foreach (GraphElement element in change.elementsToRemove)
+        {
+            if (element is not Group group) continue;
+            foreach (GraphElement contained in group.containedElements)
+            {
+                if (contained is StoryNodeUI || contained is StoryStickyNote)
+                {
+                    keep.Add(contained);
+                }
+            }
+        }
+
+        if (keep.Count == 0) return;
+
+        List<GraphElement> filtered = new List<GraphElement>();
+        foreach (GraphElement element in change.elementsToRemove)
+        {
+            if (!keep.Contains(element))
+            {
+                filtered.Add(element);
+            }
+        }
+
+        change.elementsToRemove = filtered;
+    }
+
+    private void NotifyAnnotationChanged(string undoName)
+    {
+        if ((window != null && window.IsApplyingUndo) || StoryGraphEditorHooks.IgnoreGraphViewChange) return;
+        window?.CommitGraphFromView(undoName);
     }
 
     private static string DescribeGraphChange(GraphViewChange change)
@@ -249,8 +551,22 @@ public class StoryGraphView : GraphView
     {
         ClipboardData clipboard = new ClipboardData();
         HashSet<string> copiedGuids = new HashSet<string>();
+        HashSet<string> copiedStickyGuids = new HashSet<string>();
+        HashSet<GraphElement> expanded = new HashSet<GraphElement>();
 
         foreach (GraphElement element in elements)
+        {
+            expanded.Add(element);
+            if (element is Group group)
+            {
+                foreach (GraphElement contained in group.containedElements)
+                {
+                    expanded.Add(contained);
+                }
+            }
+        }
+
+        foreach (GraphElement element in expanded)
         {
             if (element is StoryNodeUI nodeUI && nodeUI.data != null)
             {
@@ -261,12 +577,43 @@ public class StoryGraphView : GraphView
                     typeName = nodeUI.data.GetType().AssemblyQualifiedName,
                     className = nodeUI.data.GetType().Name,
                     json = EditorJsonUtility.ToJson(nodeUI.data),
-                    position = nodeUI.GetPosition().position
+                    position = GetElementGraphRect(nodeUI).position
                 });
+            }
+            else if (element is StoryStickyNote note)
+            {
+                copiedStickyGuids.Add(note.guid);
+                clipboard.stickyNotes.Add(CollectStickyNote(note));
             }
         }
 
-        if (clipboard.nodes.Count == 0)
+        foreach (GraphElement element in expanded)
+        {
+            if (element is not StoryGraphGroup group) continue;
+
+            ClipboardGroup groupCopy = new ClipboardGroup
+            {
+                title = group.title
+            };
+            foreach (GraphElement contained in group.containedElements)
+            {
+                if (contained is StoryNodeUI nodeUI && copiedGuids.Contains(nodeUI.guid))
+                {
+                    groupCopy.nodeGuids.Add(nodeUI.guid);
+                }
+                else if (contained is StoryStickyNote note && copiedStickyGuids.Contains(note.guid))
+                {
+                    groupCopy.stickyGuids.Add(note.guid);
+                }
+            }
+
+            if (groupCopy.nodeGuids.Count > 0 || groupCopy.stickyGuids.Count > 0)
+            {
+                clipboard.groups.Add(groupCopy);
+            }
+        }
+
+        if (clipboard.nodes.Count == 0 && clipboard.stickyNotes.Count == 0)
         {
             return string.Empty;
         }
@@ -322,9 +669,12 @@ public class StoryGraphView : GraphView
 
         Dictionary<string, string> guidMap = new Dictionary<string, string>();
         Dictionary<string, StoryNodeUI> newNodes = new Dictionary<string, StoryNodeUI>();
+        Dictionary<string, StoryStickyNote> newStickies = new Dictionary<string, StoryStickyNote>();
 
         ClearSelection();
 
+        if (clipboard.nodes != null)
+        {
         foreach (ClipboardNode item in clipboard.nodes)
         {
             Type type = ResolveNodeType(item);
@@ -365,6 +715,32 @@ public class StoryGraphView : GraphView
             AddToSelection(nodeUI);
             newNodes[newGuid] = nodeUI;
         }
+        }
+
+        if (clipboard.stickyNotes != null)
+        {
+            foreach (StoryStickyNoteData item in clipboard.stickyNotes)
+            {
+                if (item == null) continue;
+                string oldGuid = item.guid;
+                StoryStickyNoteData copy = new StoryStickyNoteData
+                {
+                    guid = Guid.NewGuid().ToString(),
+                    title = item.title,
+                    contents = item.contents,
+                    position = new Rect(item.position.position + offset, item.position.size),
+                    fontSize = item.fontSize,
+                    theme = item.theme
+                };
+                StoryStickyNote note = AddStickyNote(copy);
+                AddToSelection(note);
+                if (!string.IsNullOrEmpty(oldGuid))
+                {
+                    guidMap[oldGuid] = note.guid;
+                    newStickies[note.guid] = note;
+                }
+            }
+        }
 
         foreach (StoryNodeUI nodeUI in newNodes.Values)
         {
@@ -375,6 +751,8 @@ public class StoryGraphView : GraphView
             gotoNode.targetGraph = CurrentGraph;
         }
 
+        if (clipboard.links != null)
+        {
         foreach (StoryLinkData link in clipboard.links)
         {
             if (!guidMap.TryGetValue(link.baseNodeGuid, out string newBase)) continue;
@@ -386,6 +764,44 @@ public class StoryGraphView : GraphView
             if (edge != null)
             {
                 AddToSelection(edge);
+            }
+        }
+        }
+
+        if (clipboard.groups != null)
+        {
+            foreach (ClipboardGroup groupCopy in clipboard.groups)
+            {
+                if (groupCopy == null) continue;
+                StoryGroupData restored = new StoryGroupData
+                {
+                    guid = Guid.NewGuid().ToString(),
+                    title = string.IsNullOrEmpty(groupCopy.title) ? "Group" : groupCopy.title
+                };
+
+                if (groupCopy.nodeGuids != null)
+                {
+                    for (int i = 0; i < groupCopy.nodeGuids.Count; i++)
+                    {
+                        if (guidMap.TryGetValue(groupCopy.nodeGuids[i], out string newGuid))
+                        {
+                            restored.nodeGuids.Add(newGuid);
+                        }
+                    }
+                }
+
+                if (groupCopy.stickyGuids != null)
+                {
+                    for (int i = 0; i < groupCopy.stickyGuids.Count; i++)
+                    {
+                        if (guidMap.TryGetValue(groupCopy.stickyGuids[i], out string newStickyGuid))
+                        {
+                            restored.stickyNoteGuids.Add(newStickyGuid);
+                        }
+                    }
+                }
+
+                RestoreGroup(restored, newNodes, newStickies);
             }
         }
 
@@ -428,11 +844,25 @@ public class StoryGraphView : GraphView
 
     private static bool WouldPasteBeVisible(ClipboardData clipboard, Vector2 offset, Rect viewRect)
     {
-        foreach (ClipboardNode item in clipboard.nodes)
+        if (clipboard.nodes != null)
         {
-            if (viewRect.Contains(item.position + offset))
+            foreach (ClipboardNode item in clipboard.nodes)
             {
-                return true;
+                if (viewRect.Contains(item.position + offset))
+                {
+                    return true;
+                }
+            }
+        }
+
+        if (clipboard.stickyNotes != null)
+        {
+            foreach (StoryStickyNoteData note in clipboard.stickyNotes)
+            {
+                if (note != null && viewRect.Contains(note.position.position + offset))
+                {
+                    return true;
+                }
             }
         }
 
@@ -478,26 +908,41 @@ public class StoryGraphView : GraphView
     private static bool TryGetClipboardBounds(ClipboardData clipboard, out Rect bounds)
     {
         bounds = default;
-        if (clipboard.nodes == null || clipboard.nodes.Count == 0)
-        {
-            return false;
-        }
-
+        bool hasPoint = false;
         float xMin = float.MaxValue;
         float yMin = float.MaxValue;
         float xMax = float.MinValue;
         float yMax = float.MinValue;
-        foreach (ClipboardNode item in clipboard.nodes)
+
+        if (clipboard.nodes != null)
         {
-            Vector2 position = item.position;
-            xMin = Mathf.Min(xMin, position.x);
-            yMin = Mathf.Min(yMin, position.y);
-            xMax = Mathf.Max(xMax, position.x);
-            yMax = Mathf.Max(yMax, position.y);
+            foreach (ClipboardNode item in clipboard.nodes)
+            {
+                IncludePoint(item.position, ref hasPoint, ref xMin, ref yMin, ref xMax, ref yMax);
+            }
         }
 
+        if (clipboard.stickyNotes != null)
+        {
+            foreach (StoryStickyNoteData note in clipboard.stickyNotes)
+            {
+                if (note == null) continue;
+                IncludePoint(note.position.position, ref hasPoint, ref xMin, ref yMin, ref xMax, ref yMax);
+            }
+        }
+
+        if (!hasPoint) return false;
         bounds = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
         return true;
+    }
+
+    private static void IncludePoint(Vector2 position, ref bool hasPoint, ref float xMin, ref float yMin, ref float xMax, ref float yMax)
+    {
+        xMin = Mathf.Min(xMin, position.x);
+        yMin = Mathf.Min(yMin, position.y);
+        xMax = Mathf.Max(xMax, position.x);
+        yMax = Mathf.Max(yMax, position.y);
+        hasPoint = true;
     }
 
     private static bool TryParseClipboard(string data, out ClipboardData clipboard)
@@ -515,7 +960,9 @@ public class StoryGraphView : GraphView
         }
 
         clipboard = JsonUtility.FromJson<ClipboardData>(json);
-        return clipboard != null && clipboard.nodes != null && clipboard.nodes.Count > 0;
+        return clipboard != null &&
+            ((clipboard.nodes != null && clipboard.nodes.Count > 0) ||
+             (clipboard.stickyNotes != null && clipboard.stickyNotes.Count > 0));
     }
 
     private static Type ResolveNodeType(ClipboardNode item)
@@ -613,6 +1060,16 @@ public class StoryGraphView : GraphView
     {
         public List<ClipboardNode> nodes = new List<ClipboardNode>();
         public List<StoryLinkData> links = new List<StoryLinkData>();
+        public List<StoryStickyNoteData> stickyNotes = new List<StoryStickyNoteData>();
+        public List<ClipboardGroup> groups = new List<ClipboardGroup>();
+    }
+
+    [Serializable]
+    private class ClipboardGroup
+    {
+        public string title;
+        public List<string> nodeGuids = new List<string>();
+        public List<string> stickyGuids = new List<string>();
     }
 
     [Serializable]

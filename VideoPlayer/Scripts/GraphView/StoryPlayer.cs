@@ -23,6 +23,7 @@ public class StoryPlayer : MonoBehaviour
     private int gotoDepth;
     private readonly Stack<GraphFrame> graphStack = new Stack<GraphFrame>();
     private readonly List<GameObject> runtimeSpawned = new List<GameObject>();
+    private readonly HashSet<GameObject> protectedSpawned = new HashSet<GameObject>();
 
     private struct GraphFrame
     {
@@ -242,18 +243,39 @@ public class StoryPlayer : MonoBehaviour
     {
         if (instance == null) return;
         runtimeSpawned.Remove(instance);
+        protectedSpawned.Remove(instance);
+    }
+
+    public void ProtectSpawned(GameObject instance)
+    {
+        if (instance == null) return;
+        protectedSpawned.Add(instance);
+    }
+
+    public void UnprotectSpawned(GameObject instance)
+    {
+        if (instance == null) return;
+        protectedSpawned.Remove(instance);
     }
 
     public void ClearRuntimePrefabs()
     {
-        for (int i = 0; i < runtimeSpawned.Count; i++)
+        for (int i = runtimeSpawned.Count - 1; i >= 0; i--)
         {
             GameObject instance = runtimeSpawned[i];
-            if (instance == null) continue;
+            if (instance == null)
+            {
+                runtimeSpawned.RemoveAt(i);
+                continue;
+            }
+
+            if (protectedSpawned.Contains(instance)) continue;
+
             Destroy(instance);
+            runtimeSpawned.RemoveAt(i);
         }
 
-        runtimeSpawned.Clear();
+        protectedSpawned.RemoveWhere(instance => instance == null);
     }
 
     private void EnterGraphAtNode(StoryGraph destGraph, BaseNode destNode, BaseNode returnNode)

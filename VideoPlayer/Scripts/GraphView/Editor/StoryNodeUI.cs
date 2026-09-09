@@ -92,6 +92,17 @@ public class StoryNodeUI : Node
             return false;
         }
 
+        GraphView graphView = GetFirstAncestorOfType<GraphView>();
+        if (graphView != null && GetFirstAncestorOfType<Scope>() != null)
+        {
+            Vector2 graphPos = graphView.contentViewContainer.WorldToLocal(worldBound.position);
+            if (!float.IsNaN(graphPos.x) && !float.IsNaN(graphPos.y) &&
+                !float.IsInfinity(graphPos.x) && !float.IsInfinity(graphPos.y))
+            {
+                position = graphPos;
+            }
+        }
+
         return true;
     }
 
@@ -147,6 +158,10 @@ public class StoryNodeUI : Node
         {
             title = varOpNode.GetDisplayTitle();
         }
+        else if (data is BoolOperationNode boolOpNode)
+        {
+            title = boolOpNode.GetDisplayTitle();
+        }
         else if (data is PlaybackSpeedNode speedNode)
         {
             title = speedNode.GetDisplayTitle();
@@ -188,7 +203,7 @@ public class StoryNodeUI : Node
         {
             titleColor = new Color(0.20f, 0.55f, 0.25f);
         }
-        else if (data is ConditionNode || data is VariableOperationNode)
+        else if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode)
         {
             titleColor = new Color(0.48f, 0.22f, 0.62f);
         }
@@ -249,7 +264,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is VariableOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is TextNode || data is SpawnPrefabNode)
+        if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is TextNode || data is SpawnPrefabNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -696,7 +711,8 @@ public class StoryNodeUI : Node
 
             IntegerField valField = new IntegerField("比較する値")
             {
-                value = conditionNode.compareValue
+                value = conditionNode.compareValue,
+                tooltip = "Bool変数は Off=0 / On=1 として判定します"
             };
             valField.RegisterValueChangedCallback(evt =>
             {
@@ -779,6 +795,32 @@ public class StoryNodeUI : Node
             extensionContainer.Add(useVarToggle);
             extensionContainer.Add(valField);
             extensionContainer.Add(operandVarField);
+        }
+        else if (data is BoolOperationNode boolOpNode)
+        {
+            TextField varNameField = new TextField("対象変数")
+            {
+                value = boolOpNode.variableName,
+                tooltip = "Variable Database の Bool 変数名"
+            };
+            varNameField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                boolOpNode.variableName = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(boolOpNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(varNameField);
+
+            EnumField opField = new EnumField("操作", boolOpNode.operation);
+            opField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                boolOpNode.operation = (BoolOperation)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(boolOpNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(opField);
         }
         else if (data is PlaybackSpeedNode speedNode)
         {
@@ -936,7 +978,7 @@ public class StoryNodeUI : Node
             Toggle waitToggle = new Toggle("Typewriter 終了待ち")
             {
                 value = textNode.waitUntilComplete,
-                tooltip = "オン: 全文表示後のクリックで Next / オフ: 表示開始と同時に Next"
+                tooltip = "オン: 全文表示後のクリックから Next までの待ちを開始 / オフ: Typewriter 終了後に待ちを開始"
             };
             Toggle skipToggle = new Toggle("入力中クリックでスキップ")
             {
@@ -962,11 +1004,56 @@ public class StoryNodeUI : Node
             });
             extensionContainer.Add(skipToggle);
 
+            ColorField colorField = new ColorField("フォント色")
+            {
+                value = textNode.fontColor,
+                showAlpha = true
+            };
+            colorField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.fontColor = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(colorField);
+
+            FloatField fadeInField = new FloatField("フェードイン(秒)")
+            {
+                value = textNode.fadeInDuration
+            };
+            fadeInField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.fadeInDuration = Mathf.Max(0f, evt.newValue);
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(fadeInField);
+
+            FloatField fadeOutField = new FloatField("フェードアウト(秒)")
+            {
+                value = textNode.fadeOutDuration,
+                tooltip = "Next の時点から逆算して始まります。待ちより長い場合は途中からフェードします"
+            };
+            fadeOutField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.fadeOutDuration = Mathf.Max(0f, evt.newValue);
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(fadeOutField);
+
             Toggle destroyToggle = new Toggle("終了後にUIを破棄")
             {
                 value = textNode.autoDestroyUI,
-                tooltip = "終了待ちがオンのとき、クリックで進んだあとにプレハブを破棄します"
+                tooltip = "Next に進むのと同時に破棄します。オフなら UI を残したまま Next へ進みます"
             };
+            FloatField delayField = new FloatField("Nextまでの待ち(秒)")
+            {
+                value = textNode.destroyDelay,
+                tooltip = "Next に進むまでの時間。フェードアウトはこの時点から逆算して始まります"
+            };
+            delayField.style.display = DisplayStyle.Flex;
+
             destroyToggle.RegisterValueChangedCallback(evt =>
             {
                 RecordNodeUndo();
@@ -974,6 +1061,14 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(textNode);
             });
             extensionContainer.Add(destroyToggle);
+
+            delayField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                textNode.destroyDelay = Mathf.Max(0f, evt.newValue);
+                UnityEditor.EditorUtility.SetDirty(textNode);
+            });
+            extensionContainer.Add(delayField);
         }
         else if (data is SpawnPrefabNode spawnNode)
         {

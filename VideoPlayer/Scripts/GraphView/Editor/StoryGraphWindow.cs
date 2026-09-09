@@ -553,6 +553,8 @@ public class StoryGraphWindow : EditorWindow
             }
 
             EditorUtility.SetDirty(currentGraph);
+            graphView.WriteAnnotationsTo(currentGraph);
+            EditorUtility.SetDirty(currentGraph);
             if (writeToDisk)
             {
                 AssetDatabase.SaveAssetIfDirty(currentGraph);
@@ -617,7 +619,10 @@ public class StoryGraphWindow : EditorWindow
             List<GraphElement> elementsToDelete = new List<GraphElement>();
             foreach (var element in graphView.graphElements)
             {
-                if (element is Node || element is Edge) elementsToDelete.Add(element);
+                if (element is Node || element is Edge || element is Group || element is StickyNote)
+                {
+                    elementsToDelete.Add(element);
+                }
             }
             graphView.DeleteElements(elementsToDelete);
 
@@ -660,6 +665,8 @@ public class StoryGraphWindow : EditorWindow
                     }
                 }
             }
+
+            graphView.RestoreAnnotations(currentGraph, nodeDic);
         }
         finally
         {
@@ -716,6 +723,39 @@ public class StoryGraphWindow : EditorWindow
             node.position = next;
             EditorUtility.SetDirty(node);
             anyChanged = true;
+        }
+
+        if (originShifted)
+        {
+            if (graph.stickyNotes != null)
+            {
+                for (int i = 0; i < graph.stickyNotes.Count; i++)
+                {
+                    StoryStickyNoteData note = graph.stickyNotes[i];
+                    if (note == null) continue;
+                    Rect rect = note.position;
+                    Vector2 next = SanitizePosition(rect.position) - originPos;
+                    if ((rect.position - next).sqrMagnitude < 0.0001f) continue;
+                    rect.position = next;
+                    note.position = rect;
+                    anyChanged = true;
+                }
+            }
+
+            if (graph.groups != null)
+            {
+                for (int i = 0; i < graph.groups.Count; i++)
+                {
+                    StoryGroupData group = graph.groups[i];
+                    if (group == null) continue;
+                    Rect rect = group.position;
+                    Vector2 next = SanitizePosition(rect.position) - originPos;
+                    if ((rect.position - next).sqrMagnitude < 0.0001f) continue;
+                    rect.position = next;
+                    group.position = rect;
+                    anyChanged = true;
+                }
+            }
         }
 
         if (anyChanged)

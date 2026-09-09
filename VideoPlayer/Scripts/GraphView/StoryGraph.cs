@@ -6,6 +6,8 @@ public class StoryGraph : ScriptableObject
 {
     public List<BaseNode> nodes = new List<BaseNode>();
     public List<StoryLinkData> links = new List<StoryLinkData>();
+    public List<StoryGroupData> groups = new List<StoryGroupData>();
+    public List<StoryStickyNoteData> stickyNotes = new List<StoryStickyNoteData>();
 
     [HideInInspector]
     public string assetIdentity;
