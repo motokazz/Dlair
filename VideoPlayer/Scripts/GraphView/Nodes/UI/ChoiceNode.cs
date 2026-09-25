@@ -15,6 +15,9 @@ public class ChoiceNode : BaseNode
     [Header("オプション")]
     public bool autoDestroyUI = true;
 
+    [Tooltip("オン: StoryPlayer の UI Parent 配下 / オフ: Canvas 直下。Parent 未指定時はどちらも Canvas 直下")]
+    public bool parentToUiParent = true;
+
     [NonSerialized]
     private GameObject currentUIInstance;
 
@@ -28,14 +31,14 @@ public class ChoiceNode : BaseNode
             return;
         }
 
-        Canvas parentCanvas = player.GetUICanvas();
-        if (parentCanvas == null)
+        Transform parent = player.GetUIParent(parentToUiParent);
+        if (parent == null)
         {
-            Debug.LogError("【Choice Node】UIを表示するためのCanvasがシーン内に見つかりません！");
+            Debug.LogError("【Choice Node】UIを表示するための親 / Canvas がシーン内に見つかりません！");
             return;
         }
 
-        currentUIInstance = player.SpawnPrefab(branchUIPrefab, parentCanvas.transform);
+        currentUIInstance = player.SpawnPrefab(branchUIPrefab, parent);
         currentUIInstance.SetActive(true);
 
         // BranchPanelUIコンポーネントがある場合

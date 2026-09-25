@@ -150,6 +150,12 @@ public class StoryGraphWindow : EditorWindow
         GenerateGraph();
     }
 
+    public void ReloadFromAsset()
+    {
+        if (currentGraph == null) return;
+        GenerateGraph();
+    }
+
     public void NavigateBack()
     {
         PruneMissingHistory();
@@ -501,6 +507,11 @@ public class StoryGraphWindow : EditorWindow
             currentGraph.nodes.Clear();
             foreach (var nodeUI in uiNodes)
             {
+                if (nodeUI.data != null)
+                {
+                    StoryGraphNodeNaming.TryApply(nodeUI.data);
+                }
+
                 if (nodeUI.data != null && writePositions && nodeUI.TryGetLayoutPosition(out Vector2 livePos))
                 {
                     nodeUI.data.position = livePos;

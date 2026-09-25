@@ -350,6 +350,23 @@ public class StoryNodeUI : Node
         return helpLabel;
     }
 
+    private Toggle AddUiParentToggle(BaseNode node, bool current, Action<bool> setValue)
+    {
+        Toggle toggle = new Toggle("UI Parent 配下に出す")
+        {
+            value = current,
+            tooltip = "オン: StoryPlayer の UI Parent の子として生成します。オフ: Canvas 直下。Parent 未指定時はどちらも Canvas 直下です"
+        };
+        toggle.RegisterValueChangedCallback(evt =>
+        {
+            RecordNodeUndo();
+            setValue(evt.newValue);
+            UnityEditor.EditorUtility.SetDirty(node);
+        });
+        extensionContainer.Add(toggle);
+        return toggle;
+    }
+
     private void ApplyRedirectNodeStyle()
     {
         title = "";
@@ -898,6 +915,7 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
             });
             extensionContainer.Add(prefabField);
+            AddUiParentToggle(choiceNode, choiceNode.parentToUiParent, value => choiceNode.parentToUiParent = value);
 
             VisualElement choiceListContainer = new VisualElement();
 
@@ -958,6 +976,7 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(textNode);
             });
             extensionContainer.Add(prefabField);
+            AddUiParentToggle(textNode, textNode.parentToUiParent, value => textNode.parentToUiParent = value);
 
             TextField messageField = new TextField("本文")
             {
@@ -1113,6 +1132,13 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(spawnNode);
             });
             extensionContainer.Add(canvasToggle);
+
+            Toggle uiParentToggle = AddUiParentToggle(spawnNode, spawnNode.parentToUiParent, value => spawnNode.parentToUiParent = value);
+            uiParentToggle.style.display = spawnNode.parentToCanvas ? DisplayStyle.Flex : DisplayStyle.None;
+            canvasToggle.RegisterValueChangedCallback(evt =>
+            {
+                uiParentToggle.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
+            });
 
             FloatField distanceField = new FloatField("ワールド距離")
             {

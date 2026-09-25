@@ -6,6 +6,7 @@ using UnityEngine.UI;
 public class StoryLabelTreePanel : MonoBehaviour
 {
     private const float RowHeight = 36f;
+    private const float ToggleWidth = 28f;
 
     private static readonly List<StoryLabelTreePanel> instances = new List<StoryLabelTreePanel>();
 
@@ -40,8 +41,8 @@ public class StoryLabelTreePanel : MonoBehaviour
     public int rowPaddingTop = 0;
     [Tooltip("各行の下余白")]
     public int rowPaddingBottom = 0;
-    [Tooltip("1階層深くなるごとの左インデント")]
-    public int indent = 22;
+    [Tooltip("1階層深くなるごとの左インデント。0 なら子のラベルが親と同じ列に揃います")]
+    public int indent = 0;
 
     private readonly List<RowView> rows = new List<RowView>();
 
@@ -203,11 +204,7 @@ public class StoryLabelTreePanel : MonoBehaviour
         layoutElement.flexibleWidth = 1f;
 
         HorizontalLayoutGroup rowLayout = root.GetComponent<HorizontalLayoutGroup>();
-        rowLayout.padding = new RectOffset(
-            padLeft + depth * Mathf.Max(0, indent),
-            padRight,
-            padTop,
-            padBottom);
+        rowLayout.padding = new RectOffset(padLeft, padRight, padTop, padBottom);
         rowLayout.spacing = 4f;
         rowLayout.childAlignment = TextAnchor.MiddleLeft;
         rowLayout.childForceExpandWidth = false;
@@ -223,13 +220,23 @@ public class StoryLabelTreePanel : MonoBehaviour
             root = root
         };
 
+        int depthIndent = depth * Mathf.Max(0, indent);
+        if (depthIndent > 0)
+        {
+            CreateSpacer(root.transform, "Indent", depthIndent);
+        }
+
         if (node.HasChildren)
         {
-            row.toggleButton = CreateInnerButton(root.transform, "Toggle", 28f, out row.toggleLabel);
+            row.toggleButton = CreateInnerButton(root.transform, "Toggle", ToggleWidth, out row.toggleLabel);
             row.toggleLabel.text = row.expanded ? "-" : "+";
             row.toggleLabel.alignment = TextAlignmentOptions.Center;
             RowView captured = row;
             row.toggleButton.onClick.AddListener(() => Toggle(captured));
+        }
+        else
+        {
+            CreateSpacer(root.transform, "ToggleSpace", ToggleWidth);
         }
 
         row.jumpButton = CreateInnerButton(root.transform, "Title", 0f, out row.titleLabel);
@@ -288,6 +295,19 @@ public class StoryLabelTreePanel : MonoBehaviour
         label.raycastTarget = false;
 
         return go.GetComponent<Button>();
+    }
+
+    private static void CreateSpacer(Transform parent, string name, float width)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform), typeof(LayoutElement));
+        go.layer = parent.gameObject.layer;
+        go.transform.SetParent(parent, false);
+
+        LayoutElement layoutElement = go.GetComponent<LayoutElement>();
+        layoutElement.minWidth = width;
+        layoutElement.preferredWidth = width;
+        layoutElement.flexibleWidth = 0f;
+        layoutElement.minHeight = 1f;
     }
 
     private void Toggle(RowView row)

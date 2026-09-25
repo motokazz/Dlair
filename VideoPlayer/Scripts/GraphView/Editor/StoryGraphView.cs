@@ -96,6 +96,7 @@ public class StoryGraphView : GraphView
         nodeData.guid = Guid.NewGuid().ToString();
         nodeData.position = position;
         setup?.Invoke(nodeData);
+        StoryGraphNodeNaming.TryApply(nodeData);
         StoryNodeUI nodeUI = AddNodeFromData(nodeData);
         window?.CommitGraphFromView("ノードを作成", true);
         return nodeUI;
@@ -700,7 +701,7 @@ public class StoryGraphView : GraphView
 
             nodeData.guid = newGuid;
             nodeData.position = item.position + offset;
-            nodeData.name = type.Name;
+            StoryGraphNodeNaming.TryApply(nodeData);
 
             if (nodeData is LabelNode pastedLabel)
             {

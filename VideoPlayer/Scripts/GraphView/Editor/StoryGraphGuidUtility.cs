@@ -6,6 +6,8 @@ using UnityEngine;
 [InitializeOnLoad]
 public static class StoryGraphGuidUtility
 {
+    public static bool SuppressImportHandling;
+
     static StoryGraphGuidUtility()
     {
         EditorApplication.delayCall += StampMissingIdentities;
@@ -34,6 +36,7 @@ public static class StoryGraphGuidUtility
 
     public static bool TryHandleImportedGraph(StoryGraph graph, string assetPath)
     {
+        if (SuppressImportHandling) return false;
         if (graph == null || string.IsNullOrEmpty(assetPath)) return false;
 
         string fileGuid = AssetDatabase.AssetPathToGUID(assetPath);
@@ -81,6 +84,16 @@ public static class StoryGraphGuidUtility
             count++;
         }
 
+        RemapStoredGuids(graph, map);
+
+        EditorUtility.SetDirty(graph);
+        return count;
+    }
+
+    public static void RemapStoredGuids(StoryGraph graph, Dictionary<string, string> map)
+    {
+        if (graph == null || map == null || map.Count == 0) return;
+
         if (graph.links != null)
         {
             for (int i = 0; i < graph.links.Count; i++)
@@ -92,6 +105,23 @@ public static class StoryGraphGuidUtility
             }
         }
 
+        if (graph.groups != null)
+        {
+            for (int i = 0; i < graph.groups.Count; i++)
+            {
+                StoryGroupData group = graph.groups[i];
+                if (group?.nodeGuids == null) continue;
+                for (int j = 0; j < group.nodeGuids.Count; j++)
+                {
+                    string nodeGuid = group.nodeGuids[j];
+                    Remap(ref nodeGuid, map);
+                    group.nodeGuids[j] = nodeGuid;
+                }
+            }
+        }
+
+        if (graph.nodes == null) return;
+
         for (int i = 0; i < graph.nodes.Count; i++)
         {
             if (graph.nodes[i] is not GotoNode gotoNode) continue;
@@ -100,9 +130,6 @@ public static class StoryGraphGuidUtility
             gotoNode.targetLabelGuid = remapped;
             EditorUtility.SetDirty(gotoNode);
         }
-
-        EditorUtility.SetDirty(graph);
-        return count;
     }
 
     private static void Remap(ref string guid, Dictionary<string, string> map)

@@ -50,6 +50,11 @@ public class StoryGraphAssetPostprocessor : AssetPostprocessor
             {
                 dirty = true;
             }
+
+            if (StoryGraphNodeNaming.TryApplyAtPath(paths[i]) > 0)
+            {
+                dirty = true;
+            }
         }
 
         if (dirty)

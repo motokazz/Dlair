@@ -12,6 +12,9 @@ public class SpawnPrefabNode : BaseNode
     [Tooltip("オン: Canvas 配下の UI として出す / オフ: ワールド座標")]
     public bool parentToCanvas = true;
 
+    [Tooltip("オン: StoryPlayer の UI Parent 配下 / オフ: Canvas 直下。Parent 未指定時はどちらも Canvas 直下")]
+    public bool parentToUiParent = true;
+
     [Tooltip("ワールド生成時、カメラからこの距離の位置に出す")]
     public float worldDistance = 10f;
 
@@ -27,14 +30,13 @@ public class SpawnPrefabNode : BaseNode
         Transform parent = null;
         if (parentToCanvas)
         {
-            Canvas canvas = player != null ? player.GetUICanvas() : null;
-            if (canvas == null)
+            parent = player != null ? player.GetUIParent(parentToUiParent) : null;
+            if (parent == null)
             {
-                Debug.LogError("【Spawn Prefab】Canvas が見つかりません！");
+                Debug.LogError("【Spawn Prefab】UIの親 / Canvas が見つかりません！");
                 player.ContinueTo(this, "Next");
                 return;
             }
-            parent = canvas.transform;
         }
 
         GameObject instance = PrefabPool.Spawn(prefab, parent);
@@ -51,23 +53,23 @@ public class SpawnPrefabNode : BaseNode
         return prefab != null ? prefab.name : "Spawn";
     }
 
-    private void PlaceAtPointer(GameObject instance, RectTransform canvasRect)
+    private void PlaceAtPointer(GameObject instance, RectTransform parentRect)
     {
         Vector2 screen = GetPointerScreenPosition();
 
-        if (canvasRect != null)
+        if (parentRect != null)
         {
             RectTransform rt = instance.transform as RectTransform;
             if (rt == null) return;
 
-            Canvas canvas = canvasRect.GetComponent<Canvas>();
+            Canvas canvas = parentRect.GetComponentInParent<Canvas>();
             Camera eventCam = null;
             if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
             {
                 eventCam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
             }
 
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screen, eventCam, out Vector2 local))
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screen, eventCam, out Vector2 local))
             {
                 rt.anchorMin = new Vector2(0.5f, 0.5f);
                 rt.anchorMax = new Vector2(0.5f, 0.5f);

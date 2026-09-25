@@ -32,6 +32,9 @@ public class TextNode : BaseNode
     [Tooltip("入力中のクリックで全文を出して打ちを飛ばす。進むのは全文表示後のクリック")]
     public bool clickToSkip = true;
 
+    [Tooltip("オン: StoryPlayer の UI Parent 配下 / オフ: Canvas 直下。Parent 未指定時はどちらも Canvas 直下")]
+    public bool parentToUiParent = true;
+
     [NonSerialized]
     private GameObject currentUIInstance;
 
@@ -66,15 +69,15 @@ public class TextNode : BaseNode
             return;
         }
 
-        Canvas parentCanvas = player.GetUICanvas();
-        if (parentCanvas == null)
+        Transform parent = player.GetUIParent(parentToUiParent);
+        if (parent == null)
         {
-            Debug.LogError("【Text Node】UIを表示するためのCanvasがシーン内に見つかりません！");
+            Debug.LogError("【Text Node】UIを表示するための親 / Canvas がシーン内に見つかりません！");
             Advance(player);
             return;
         }
 
-        currentUIInstance = player.SpawnPrefab(textUIPrefab, parentCanvas.transform);
+        currentUIInstance = player.SpawnPrefab(textUIPrefab, parent);
         player.ProtectSpawned(currentUIInstance);
         ApplyFontColor(currentUIInstance);
         CanvasGroup canvasGroup = GetOrAddCanvasGroup(currentUIInstance);

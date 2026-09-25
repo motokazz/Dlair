@@ -12,6 +12,8 @@ public class StoryPlayer : MonoBehaviour
     public DualVideoPlayer dualPlayer;
     public StoryVariableDatabase variableDatabase;
     public Canvas uiCanvas;
+    [Tooltip("Choice / Text / Spawn(UI) の生成先。空なら Canvas 直下")]
+    public RectTransform uiParent;
 
     [Header("Debug / Collection")]
     [Tooltip("指定した行先ラベル名から開始します。空なら Start ノードから開始します。")]
@@ -450,9 +452,21 @@ public class StoryPlayer : MonoBehaviour
         return false;
     }
 
+    public Transform GetUIParent(bool useUiParent = true)
+    {
+        if (useUiParent && uiParent != null) return uiParent;
+        Canvas canvas = GetUICanvas();
+        return canvas != null ? canvas.transform : null;
+    }
+
     public Canvas GetUICanvas()
     {
         if (uiCanvas != null) return uiCanvas;
+        if (uiParent != null)
+        {
+            uiCanvas = uiParent.GetComponentInParent<Canvas>();
+            if (uiCanvas != null) return uiCanvas;
+        }
 #if UNITY_2023_1_OR_NEWER
         uiCanvas = Object.FindFirstObjectByType<Canvas>();
 #else
