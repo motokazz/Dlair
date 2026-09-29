@@ -1872,100 +1872,124 @@ public class StoryNodeUI : Node
     private void DrawGotoSettings(GotoNode gotoNode)
     {
         List<LabelOption> options = new List<LabelOption>();
-        DropdownField dropdown = new DropdownField("行先")
+
+        VisualElement row = new VisualElement();
+        row.AddToClassList("unity-base-field");
+        row.AddToClassList("unity-popup-field");
+        row.AddToClassList("unity-base-popup-field");
+
+        Label fieldLabel = new Label("行先")
         {
             tooltip = "先に作成した Label（行先）ノードから選びます。"
         };
+        fieldLabel.AddToClassList("unity-base-field__label");
+        fieldLabel.AddToClassList("unity-popup-field__label");
+        fieldLabel.AddToClassList("unity-base-popup-field__label");
 
-        void RefreshGotoDropdown()
+        VisualElement input = new VisualElement
         {
-            options.Clear();
-            options.Add(new LabelOption { display = "(未選択)", labelGuid = "", graph = null });
-            CollectLabelOptions(options);
+            tooltip = "クリックして行先を検索します。"
+        };
+        input.AddToClassList("unity-base-field__input");
+        input.AddToClassList("unity-popup-field__input");
+        input.AddToClassList("unity-base-popup-field__input");
 
-            HashSet<string> usedDisplays = new HashSet<string>();
-            for (int i = 0; i < options.Count; i++)
-            {
-                LabelOption option = options[i];
-                string display = option.display;
-                if (!usedDisplays.Add(display))
-                {
-                    string graphName = option.graph != null ? option.graph.name : "graph";
-                    display = $"{option.display}  ({graphName})";
-                    if (!usedDisplays.Add(display))
-                    {
-                        string suffix = option.labelGuid.Length > 4 ? option.labelGuid.Substring(0, 4) : option.labelGuid;
-                        display = display + " " + suffix;
-                        usedDisplays.Add(display);
-                    }
+        Label valueLabel = new Label("(未選択)")
+        {
+            pickingMode = PickingMode.Ignore
+        };
+        valueLabel.AddToClassList("unity-base-popup-field__text");
+        valueLabel.style.flexGrow = 1;
+        valueLabel.style.overflow = Overflow.Hidden;
+        valueLabel.style.textOverflow = TextOverflow.Ellipsis;
+        valueLabel.style.whiteSpace = WhiteSpace.NoWrap;
 
-                    option.display = display;
-                }
-            }
+        Color fieldText = new Color(0.85f, 0.85f, 0.85f);
+        fieldLabel.style.color = new StyleColor(fieldText);
+        valueLabel.style.color = new StyleColor(fieldText);
 
-            List<string> choices = new List<string>(options.Count);
-            for (int i = 0; i < options.Count; i++)
-            {
-                choices.Add(options[i].display);
-            }
+        VisualElement arrow = new VisualElement { pickingMode = PickingMode.Ignore };
+        arrow.AddToClassList("unity-base-popup-field__arrow");
+        input.Add(valueLabel);
+        input.Add(arrow);
+        row.Add(fieldLabel);
+        row.Add(input);
 
+        void RefreshButtonLabel()
+        {
+            RebuildGotoOptions(gotoNode, options);
             string selected = "(未選択)";
-            for (int i = 1; i < options.Count; i++)
+            if (string.IsNullOrEmpty(gotoNode.targetLabelGuid))
             {
-                if (options[i].labelGuid == gotoNode.targetLabelGuid)
-                {
-                    selected = options[i].display;
-                    break;
-                }
-            }
-
-            if (selected == "(未選択)" && !string.IsNullOrEmpty(gotoNode.targetLabelGuid))
-            {
-                string shortGuid = gotoNode.targetLabelGuid.Length > 8
-                    ? gotoNode.targetLabelGuid.Substring(0, 8)
-                    : gotoNode.targetLabelGuid;
-                string missing = "(欠損) " + shortGuid;
-                options.Insert(1, new LabelOption
-                {
-                    display = missing,
-                    labelGuid = gotoNode.targetLabelGuid,
-                    graph = gotoNode.targetGraph
-                });
-                choices.Insert(1, missing);
-                selected = missing;
-            }
-
-            dropdown.choices = choices;
-            dropdown.SetValueWithoutNotify(selected);
-            RefreshDynamicTitle();
-        }
-
-        dropdown.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-            LabelOption picked = options.Find(o => o.display == evt.newValue);
-            if (picked == null || string.IsNullOrEmpty(picked.labelGuid))
-            {
-                gotoNode.targetLabelGuid = "";
-                gotoNode.targetGraph = null;
+                selected = options.Count > 0 ? options[0].display : selected;
             }
             else
             {
-                gotoNode.targetLabelGuid = picked.labelGuid;
-                gotoNode.targetGraph = picked.graph;
+                for (int i = 1; i < options.Count; i++)
+                {
+                    if (options[i].labelGuid == gotoNode.targetLabelGuid)
+                    {
+                        selected = options[i].display;
+                        break;
+                    }
+                }
             }
 
-            UnityEditor.EditorUtility.SetDirty(gotoNode);
+            valueLabel.text = selected;
+            input.tooltip = selected;
             RefreshDynamicTitle();
+        }
+
+        void OpenPopup()
+        {
+            RebuildGotoOptions(gotoNode, options);
+            var snapshot = new List<LabelOption>(options.Count);
+            var labels = new string[options.Count];
+            int selectedIndex = 0;
+            for (int i = 0; i < options.Count; i++)
+            {
+                snapshot.Add(options[i]);
+                labels[i] = options[i].display;
+                if (i > 0 && options[i].labelGuid == gotoNode.targetLabelGuid)
+                    selectedIndex = i;
+            }
+
+            GotoDestinationPopup.Show(input, labels, selectedIndex, index =>
+            {
+                if (index < 0 || index >= snapshot.Count) return;
+
+                RecordNodeUndo();
+                LabelOption picked = snapshot[index];
+                if (picked == null || string.IsNullOrEmpty(picked.labelGuid))
+                {
+                    gotoNode.targetLabelGuid = "";
+                    gotoNode.targetGraph = null;
+                }
+                else
+                {
+                    gotoNode.targetLabelGuid = picked.labelGuid;
+                    gotoNode.targetGraph = picked.graph;
+                }
+
+                UnityEditor.EditorUtility.SetDirty(gotoNode);
+                RefreshButtonLabel();
+            });
+        }
+
+        input.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
+        input.RegisterCallback<PointerUpEvent>(evt =>
+        {
+            if (evt.button != 0) return;
+            OpenPopup();
+            evt.StopPropagation();
         });
+        row.RegisterCallback<MouseEnterEvent>(_ => RefreshButtonLabel());
+        RegisterCallback<AttachToPanelEvent>(_ => RefreshButtonLabel());
+        RegisterCallback<DetachFromPanelEvent>(_ => GotoDestinationPopup.Close());
 
-        dropdown.RegisterCallback<MouseEnterEvent>(_ => RefreshGotoDropdown());
-        dropdown.RegisterCallback<FocusInEvent>(_ => RefreshGotoDropdown());
-        RegisterCallback<AttachToPanelEvent>(_ => RefreshGotoDropdown());
+        extensionContainer.Add(row);
 
-        extensionContainer.Add(dropdown);
-
-        Label hint = new Label("行先ノードを先に作ると、このリストに表示されます。")
+        Label hint = new Label("クリックすると検索できます。行先ノードを先に作るとリストに出ます。")
         {
             style =
             {
@@ -1976,7 +2000,57 @@ public class StoryNodeUI : Node
         };
         extensionContainer.Add(hint);
 
-        RefreshGotoDropdown();
+        RefreshButtonLabel();
+    }
+
+    private void RebuildGotoOptions(GotoNode gotoNode, List<LabelOption> options)
+    {
+        options.Clear();
+        options.Add(new LabelOption { display = "(未選択)", labelGuid = "", graph = null });
+        CollectLabelOptions(options);
+
+        HashSet<string> usedDisplays = new HashSet<string>();
+        for (int i = 0; i < options.Count; i++)
+        {
+            LabelOption option = options[i];
+            string display = option.display;
+            if (!usedDisplays.Add(display))
+            {
+                string graphName = option.graph != null ? option.graph.name : "graph";
+                display = $"{option.display}  ({graphName})";
+                if (!usedDisplays.Add(display))
+                {
+                    string suffix = option.labelGuid.Length > 4 ? option.labelGuid.Substring(0, 4) : option.labelGuid;
+                    display = display + " " + suffix;
+                    usedDisplays.Add(display);
+                }
+
+                option.display = display;
+            }
+        }
+
+        bool found = string.IsNullOrEmpty(gotoNode.targetLabelGuid);
+        for (int i = 1; i < options.Count; i++)
+        {
+            if (options[i].labelGuid == gotoNode.targetLabelGuid)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            string shortGuid = gotoNode.targetLabelGuid.Length > 8
+                ? gotoNode.targetLabelGuid.Substring(0, 8)
+                : gotoNode.targetLabelGuid;
+            options.Insert(1, new LabelOption
+            {
+                display = "(欠損) " + shortGuid,
+                labelGuid = gotoNode.targetLabelGuid,
+                graph = gotoNode.targetGraph
+            });
+        }
     }
 
     private void CollectLabelOptions(List<LabelOption> options)
