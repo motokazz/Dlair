@@ -149,7 +149,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlaylistVideoPlayer
   dualPlayer: {fileID: 1871428319}
-  playlistAsset: {fileID: 11400000, guid: 7caacf06b27178f4995d2048ea894789, type: 2}
+  playlistAsset: {fileID: 0}
   dummyClip: {fileID: 32900000, guid: 2655400e42ec2f1409181c772354ddf5, type: 3}
   currentMode: 1
   loopPlaylist: 1
@@ -330,7 +330,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 56.600006, y: 0}
+  m_AnchoredPosition: {x: 56.600037, y: 0}
   m_SizeDelta: {x: 500, y: 100}
   m_Pivot: {x: 0, y: 0.5}
 --- !u!114 &718595104
@@ -699,7 +699,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.37254903, g: 0.37254903, b: 0.37254903, a: 0}
+  m_BackGroundColor: {r: 0.2, g: 0.2, b: 0.2, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -1891,7 +1891,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 25096776376925297, guid: 4c846b26df0eb8647970fecf5ff84f39, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: -200
+      value: -199.99994
       objectReference: {fileID: 0}
     - target: {fileID: 25096776376925297, guid: 4c846b26df0eb8647970fecf5ff84f39, type: 3}
       propertyPath: m_AnchoredPosition.y
@@ -1936,7 +1936,7 @@ PrefabInstance:
     - target: {fileID: 8540208235036060132, guid: 4c846b26df0eb8647970fecf5ff84f39, type: 3}
       propertyPath: rootGraph
       value: 
-      objectReference: {fileID: 11400000, guid: 7406e3d58743e43439c1e267a5fec058, type: 2}
+      objectReference: {fileID: 11400000, guid: be30f1147062dcf46bdaa1fc9fb4d9fe, type: 2}
     - target: {fileID: 8540208235036060132, guid: 4c846b26df0eb8647970fecf5ff84f39, type: 3}
       propertyPath: rowColor.b
       value: 0
