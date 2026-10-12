@@ -25,8 +25,8 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     [Header("操作")]
     public bool enablePan = true;
     public bool enableZoom = true;
-    [Tooltip("Button などの Selectable 上ではパンしない（クリックを優先）")]
-    public bool ignoreWhenOverSelectable = true;
+    [Tooltip("ボタン上でこの秒数押し続けるとパンを開始する。それより前に離すとボタンが動作する")]
+    [Min(0.05f)] public float panHoldDuration = 0.4f;
 
     [Header("ズーム")]
     [Min(0.1f)] public float minZoom = 1f;
@@ -53,12 +53,21 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     private RectTransform legacyTarget;
 
     private readonly List<TrackedTarget> tracked = new List<TrackedTarget>();
+    private readonly List<RaycastResult> raycastResults = new List<RaycastResult>();
     private float currentZoom = 1f;
     private bool dragging;
     private bool pinching;
     private float lastPinchDistance;
     private Camera eventCamera;
     private Canvas canvas;
+    private bool holdPending;
+    private float holdStartTime;
+    private Selectable holdSelectable;
+    private bool manualPan;
+    private Vector2 manualPanPosition;
+    private Selectable suppressedSelectable;
+    private int restoreSuppressedFrame = -1;
+    private int zoomAppliedFrame = -1;
 
     public float CurrentZoom => currentZoom;
 
@@ -91,6 +100,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         minZoom = Mathf.Max(0.1f, minZoom);
         maxZoom = Mathf.Max(minZoom, maxZoom);
         zoomStep = Mathf.Max(0.01f, zoomStep);
+        panHoldDuration = Mathf.Max(0.05f, panHoldDuration);
         MigrateLegacyTarget();
     }
 
@@ -98,6 +108,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     {
         dragging = false;
         pinching = false;
+        CancelHold(restoreSelectable: true);
         currentZoom = 1f;
         if (tracked.Count == 0) CacheTargets();
 
@@ -121,7 +132,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     {
         if (eventData == null) return;
         eventData.useDragThreshold = true;
-        if (ShouldIgnore(eventData))
+        if (IsHoldToPanTarget(eventData.pointerPressRaycast.gameObject))
         {
             eventData.pointerDrag = null;
         }
@@ -129,7 +140,8 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        dragging = enablePan && eventData != null && eventData.button == PointerEventData.InputButton.Left && !ShouldIgnore(eventData);
+        if (holdPending || manualPan) return;
+        dragging = enablePan && eventData != null && eventData.button == PointerEventData.InputButton.Left && !IsHoldToPanTarget(PressedObject(eventData));
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -149,22 +161,157 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         float delta = eventData.scrollDelta.y;
         if (Mathf.Approximately(delta, 0f)) delta = eventData.scrollDelta.x;
         if (Mathf.Approximately(delta, 0f)) return;
+        if (IsOverWheelConsumer(eventData.position)) return;
 
-        float factor = 1f + Mathf.Sign(delta) * zoomStep;
-        ApplyZoom(currentZoom * factor, eventData.position, eventData.pressEventCamera);
+        TryApplyWheelZoom(delta, eventData.position, eventData.pressEventCamera);
     }
 
     public void OnPointerClick(PointerEventData eventData)
     {
         if (!resetOnDoubleClick || eventData == null || eventData.clickCount < 2) return;
-        if (ShouldIgnore(eventData)) return;
+        if (IsHoldToPanTarget(PressedObject(eventData))) return;
         ResetView();
+    }
+
+    private void OnDisable()
+    {
+        CancelHold(restoreSelectable: true);
     }
 
     private void Update()
     {
-        if (!enableZoom || !isActiveAndEnabled) return;
+        if (!isActiveAndEnabled) return;
+        RestoreSuppressedSelectable();
+        UpdateHoldAndManualPan();
+        if (!enableZoom) return;
+        HandleWheelZoom();
         HandlePinchZoom();
+    }
+
+    private void UpdateHoldAndManualPan()
+    {
+        if (pinching)
+        {
+            holdPending = false;
+            holdSelectable = null;
+            manualPan = false;
+            if (suppressedSelectable != null) restoreSuppressedFrame = Time.frameCount + 1;
+            return;
+        }
+
+        if (!TryReadPrimaryPointer(out Vector2 position, out bool pressed, out bool pressedThisFrame))
+        {
+            CancelHold(restoreSelectable: true);
+            return;
+        }
+
+        Camera cam = EventCamera();
+        if (pressedThisFrame && enablePan && ContainsScreenPoint(position, cam))
+        {
+            GameObject hit = RaycastTop(position);
+            if (IsHoldToPanTarget(hit))
+            {
+                holdPending = true;
+                manualPan = false;
+                holdStartTime = Time.unscaledTime;
+                holdSelectable = hit.GetComponentInParent<Selectable>();
+            }
+        }
+
+        if (holdPending)
+        {
+            if (!pressed)
+            {
+                holdPending = false;
+                holdSelectable = null;
+            }
+            else if (Time.unscaledTime - holdStartTime >= panHoldDuration)
+            {
+                holdPending = false;
+                BeginManualPan(position);
+            }
+        }
+
+        if (!manualPan) return;
+
+        if (!pressed)
+        {
+            manualPan = false;
+            if (suppressedSelectable != null) restoreSuppressedFrame = Time.frameCount + 1;
+            return;
+        }
+
+        Vector2 delta = position - manualPanPosition;
+        manualPanPosition = position;
+        if (enablePan) PanByScreenDelta(delta, cam);
+    }
+
+    private void BeginManualPan(Vector2 position)
+    {
+        dragging = false;
+        manualPan = true;
+        manualPanPosition = position;
+        if (suppressedSelectable != null && suppressedSelectable != holdSelectable && !suppressedSelectable.enabled)
+        {
+            suppressedSelectable.enabled = true;
+        }
+
+        suppressedSelectable = holdSelectable;
+        holdSelectable = null;
+        if (suppressedSelectable != null) suppressedSelectable.enabled = false;
+    }
+
+    private void CancelHold(bool restoreSelectable)
+    {
+        holdPending = false;
+        holdSelectable = null;
+        manualPan = false;
+        if (!restoreSelectable)
+        {
+            suppressedSelectable = null;
+            return;
+        }
+
+        if (suppressedSelectable != null && !suppressedSelectable.enabled)
+        {
+            suppressedSelectable.enabled = true;
+        }
+
+        suppressedSelectable = null;
+        restoreSuppressedFrame = -1;
+    }
+
+    private void RestoreSuppressedSelectable()
+    {
+        if (restoreSuppressedFrame != Time.frameCount || suppressedSelectable == null) return;
+        suppressedSelectable.enabled = true;
+        suppressedSelectable = null;
+        restoreSuppressedFrame = -1;
+    }
+
+    private void HandleWheelZoom()
+    {
+        Mouse mouse = Mouse.current;
+        if (mouse == null) return;
+
+        Vector2 scroll = mouse.scroll.ReadValue();
+        float delta = scroll.y;
+        if (Mathf.Approximately(delta, 0f)) delta = scroll.x;
+        if (Mathf.Approximately(delta, 0f)) return;
+
+        Vector2 position = mouse.position.ReadValue();
+        Camera cam = EventCamera();
+        if (!ContainsScreenPoint(position, cam)) return;
+        if (IsOverWheelConsumer(position)) return;
+        TryApplyWheelZoom(delta, position, cam);
+    }
+
+    private void TryApplyWheelZoom(float delta, Vector2 screenPosition, Camera cam)
+    {
+        if (Time.frameCount == zoomAppliedFrame) return;
+        zoomAppliedFrame = Time.frameCount;
+        float factor = 1f + Mathf.Sign(delta) * zoomStep;
+        ApplyZoom(currentZoom * factor, screenPosition, cam);
     }
 
     private void HandlePinchZoom()
@@ -481,18 +628,94 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         return null;
     }
 
-    private bool ShouldIgnore(PointerEventData eventData)
+    private static GameObject PressedObject(PointerEventData eventData)
     {
-        if (!ignoreWhenOverSelectable || eventData == null) return false;
-
-        GameObject go = eventData.pointerCurrentRaycast.gameObject;
+        if (eventData == null) return null;
+        GameObject go = eventData.pointerPressRaycast.gameObject;
         if (go == null) go = eventData.pointerPress;
-        if (go == null) go = eventData.pointerEnter;
-        if (go == null) return false;
+        if (go == null) go = eventData.pointerCurrentRaycast.gameObject;
+        return go;
+    }
+
+    private bool IsHoldToPanTarget(GameObject go)
+    {
+        if (go == null || go == gameObject) return false;
 
         Selectable selectable = go.GetComponentInParent<Selectable>();
-        if (selectable == null) return false;
-        return selectable.gameObject != gameObject;
+        if (selectable == null || selectable.gameObject == gameObject || !selectable.IsInteractable()) return false;
+        if (selectable is Slider || selectable is Scrollbar) return false;
+        return selectable is Button || selectable is Toggle;
+    }
+
+    private bool IsOverWheelConsumer(Vector2 screenPosition)
+    {
+        GameObject go = RaycastTop(screenPosition);
+        if (go == null) return false;
+
+        Transform current = go.transform;
+        while (current != null)
+        {
+            if (current == transform) return false;
+            if (current.GetComponent<ScrollRect>() != null) return true;
+
+            MonoBehaviour[] behaviours = current.GetComponents<MonoBehaviour>();
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] is IScrollHandler && behaviours[i] is not UiPanZoom)
+                {
+                    return true;
+                }
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private GameObject RaycastTop(Vector2 screenPosition)
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null) return null;
+
+        PointerEventData pointer = new PointerEventData(eventSystem)
+        {
+            position = screenPosition
+        };
+        raycastResults.Clear();
+        eventSystem.RaycastAll(pointer, raycastResults);
+        if (raycastResults.Count == 0) return null;
+        return raycastResults[0].gameObject;
+    }
+
+    private static bool TryReadPrimaryPointer(out Vector2 position, out bool pressed, out bool pressedThisFrame)
+    {
+        Touchscreen touchscreen = Touchscreen.current;
+        if (touchscreen != null)
+        {
+            var touch = touchscreen.primaryTouch;
+            if (touch.press.isPressed || touch.press.wasReleasedThisFrame)
+            {
+                position = touch.position.ReadValue();
+                pressed = touch.press.isPressed;
+                pressedThisFrame = touch.press.wasPressedThisFrame;
+                return true;
+            }
+        }
+
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+        {
+            position = mouse.position.ReadValue();
+            pressed = mouse.leftButton.isPressed;
+            pressedThisFrame = mouse.leftButton.wasPressedThisFrame;
+            return true;
+        }
+
+        position = default;
+        pressed = false;
+        pressedThisFrame = false;
+        return false;
     }
 
     private bool ContainsScreenPoint(Vector2 screenPosition, Camera cam)

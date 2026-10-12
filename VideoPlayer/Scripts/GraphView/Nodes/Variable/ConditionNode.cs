@@ -10,6 +10,10 @@ public enum ConditionOperator
     NotEqual          // != (等しくない)
 }
 
+/// <summary>
+/// 変数を数値として比較し、True / False へ進む。
+/// Bool は Off=0 / On=1。変数名はデータベースか変数宣言ノードから選ぶ。
+/// </summary>
 public class ConditionNode : BaseNode
 {
     public string variableName = "A";                                      // 判定する変数名

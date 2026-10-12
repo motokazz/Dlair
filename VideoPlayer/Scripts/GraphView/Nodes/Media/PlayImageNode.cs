@@ -8,6 +8,9 @@ public class PlayImageNode : BaseNode
     public float duration = 5.0f;
 
     public AudioClip audioClip;
+
+    [Tooltip("この Audio Clip をどの音量スライダーで鳴らすか")]
+    public StoryAudioBus audioBus = StoryAudioBus.BGM;
     public float crossFadeDuration = 1.0f;
     public bool isLooping;
 
@@ -18,7 +21,7 @@ public class PlayImageNode : BaseNode
     {
         if (image != null)
         {
-            player.PlayImage(image, duration, audioClip, isLooping, crossFadeDuration, this, portOutputTime);
+            player.PlayImage(image, duration, audioClip, isLooping, crossFadeDuration, this, portOutputTime, audioBus);
         }
     }
 }

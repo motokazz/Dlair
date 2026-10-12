@@ -20,8 +20,7 @@ public class StoryNodeUI : Node
         this.guid = nodeData.guid;
         this.data = nodeData;
 
-        // タイトルバーの名前を設定
-        this.title = nodeData.GetType().Name.Replace("Node", "");
+        this.title = StoryGraphNodeNaming.Build(nodeData);
         this.SetPosition(new Rect(nodeData.position, Vector2.zero));
 
         Port inputPort = InstantiatePort(Orientation.Horizontal, Direction.Input, Port.Capacity.Multi, typeof(bool));
@@ -154,46 +153,8 @@ public class StoryNodeUI : Node
 
     private void RefreshDynamicTitle()
     {
-        if (data is VariableOperationNode varOpNode)
-        {
-            title = varOpNode.GetDisplayTitle();
-        }
-        else if (data is BoolOperationNode boolOpNode)
-        {
-            title = boolOpNode.GetDisplayTitle();
-        }
-        else if (data is PlaybackSpeedNode speedNode)
-        {
-            title = speedNode.GetDisplayTitle();
-        }
-        else if (data is ConditionNode conditionNode)
-        {
-            title = conditionNode.GetDisplayTitle();
-        }
-        else if (data is RandomBranchNode randomBranchNode)
-        {
-            title = randomBranchNode.GetDisplayTitle();
-        }
-        else if (data is ConditionBranchNode conditionBranchNode)
-        {
-            title = conditionBranchNode.GetDisplayTitle();
-        }
-        else if (data is LabelNode labelNode)
-        {
-            title = labelNode.GetDisplayTitle();
-        }
-        else if (data is GotoNode gotoNode)
-        {
-            title = gotoNode.GetDisplayTitle();
-        }
-        else if (data is TextNode textNode)
-        {
-            title = textNode.GetDisplayTitle();
-        }
-        else if (data is SpawnPrefabNode spawnNode)
-        {
-            title = spawnNode.GetDisplayTitle();
-        }
+        if (data == null || data is RedirectNode) return;
+        title = StoryGraphNodeNaming.Build(data);
     }
 
     private void ApplyNodeStyle()
@@ -203,9 +164,10 @@ public class StoryNodeUI : Node
         {
             titleColor = new Color(0.20f, 0.55f, 0.25f);
         }
-        else if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode)
+        else if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode)
         {
             titleColor = new Color(0.48f, 0.22f, 0.62f);
+            if (data is VariableDeclareNode) style.minWidth = 300;
         }
         else if (data is PlaybackSpeedNode)
         {
@@ -236,6 +198,11 @@ public class StoryNodeUI : Node
             titleColor = new Color(0.10f, 0.48f, 0.48f);
             style.minWidth = 180;
         }
+        else if (data is WaitNode)
+        {
+            titleColor = new Color(0.22f, 0.34f, 0.52f);
+            style.minWidth = 160;
+        }
         else if (data is GotoNode)
         {
             titleColor = new Color(0.58f, 0.42f, 0.12f);
@@ -244,6 +211,11 @@ public class StoryNodeUI : Node
         else if (data is TextNode)
         {
             titleColor = new Color(0.18f, 0.40f, 0.52f);
+            style.minWidth = 220;
+        }
+        else if (data is VariableTextNode)
+        {
+            titleColor = new Color(0.12f, 0.46f, 0.40f);
             style.minWidth = 220;
         }
         else if (data is SpawnPrefabNode)
@@ -264,7 +236,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is TextNode || data is SpawnPrefabNode)
+        if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is WaitNode || data is TextNode || data is VariableTextNode || data is SpawnPrefabNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -468,6 +440,7 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 playClipNode.clip = evt.newValue as VideoClip;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
+                RefreshDynamicTitle();
                 RefreshMediaThumbnail();
             });
             extensionContainer.Add(clipField);
@@ -482,8 +455,21 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 playClipNode.audioClip = evt.newValue as AudioClip;
                 UnityEditor.EditorUtility.SetDirty(playClipNode);
+                RefreshDynamicTitle();
             });
             extensionContainer.Add(audioField);
+
+            EnumField busField = new EnumField("出力", playClipNode.audioBus)
+            {
+                tooltip = "Audio Clip を BGM / Voice / SE のどのスライダーで鳴らすか"
+            };
+            busField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                playClipNode.audioBus = (StoryAudioBus)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(playClipNode);
+            });
+            extensionContainer.Add(busField);
 
             FloatField fadeField = new FloatField("クロスフェード(秒)")
             {
@@ -534,6 +520,7 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 playImageNode.image = evt.newValue as Texture2D;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
+                RefreshDynamicTitle();
                 RefreshMediaThumbnail();
             });
             extensionContainer.Add(imageField);
@@ -560,8 +547,21 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 playImageNode.audioClip = evt.newValue as AudioClip;
                 UnityEditor.EditorUtility.SetDirty(playImageNode);
+                RefreshDynamicTitle();
             });
             extensionContainer.Add(audioField);
+
+            EnumField imageBusField = new EnumField("出力", playImageNode.audioBus)
+            {
+                tooltip = "Audio Clip を BGM / Voice / SE のどのスライダーで鳴らすか"
+            };
+            imageBusField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                playImageNode.audioBus = (StoryAudioBus)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(playImageNode);
+            });
+            extensionContainer.Add(imageBusField);
 
             FloatField fadeField = new FloatField("クロスフェード(秒)")
             {
@@ -636,7 +636,7 @@ public class StoryNodeUI : Node
                 RecordNodeUndo();
                 subGraphNode.subGraph = assigned;
                 UnityEditor.EditorUtility.SetDirty(subGraphNode);
-                title = subGraphNode.subGraph != null ? subGraphNode.subGraph.name : "SubGraph";
+                RefreshDynamicTitle();
                 cycleWarning.style.display = DisplayStyle.None;
             });
             extensionContainer.Add(graphField);
@@ -655,10 +655,7 @@ public class StoryNodeUI : Node
             };
             extensionContainer.Add(openButton);
 
-            if (subGraphNode.subGraph != null)
-            {
-                title = subGraphNode.subGraph.name;
-            }
+            RefreshDynamicTitle();
 
             titleContainer.RegisterCallback<MouseDownEvent>(evt =>
             {
@@ -698,23 +695,33 @@ public class StoryNodeUI : Node
         {
             DrawGotoSettings(gotoNode);
         }
+        else if (data is WaitNode waitNode)
+        {
+            FloatField secField = new FloatField("Sec")
+            {
+                value = waitNode.sec,
+                tooltip = "Next に進むまでの待ち時間（秒）。Time.deltaTime を積算して測るため、フレームレートには依存しない。"
+            };
+            secField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                waitNode.sec = Mathf.Max(0f, evt.newValue);
+                secField.SetValueWithoutNotify(waitNode.sec);
+                UnityEditor.EditorUtility.SetDirty(waitNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(secField);
+        }
+        else if (data is VariableDeclareNode declareNode)
+        {
+            DrawVariableDeclareSettings(declareNode);
+        }
         // ==========================================
         // ★追加：もしデータが ConditionNode だったら…
         // ==========================================
         else if (data is ConditionNode conditionNode)
         {
-            TextField varNameField = new TextField("変数名")
-            {
-                value = conditionNode.variableName
-            };
-            varNameField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                conditionNode.variableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(conditionNode);
-                RefreshDynamicTitle();
-            });
-            extensionContainer.Add(varNameField);
+            AddVariableDropdown("変数名", () => conditionNode.variableName, value => conditionNode.variableName = value, "比較する変数");
 
             EnumField opField = new EnumField("条件", conditionNode.comparison);
             opField.RegisterValueChangedCallback(evt =>
@@ -745,18 +752,7 @@ public class StoryNodeUI : Node
         // ==========================================
         else if (data is VariableOperationNode varOpNode)
         {
-            TextField varNameField = new TextField("対象変数")
-            {
-                value = varOpNode.variableName
-            };
-            varNameField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                varOpNode.variableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(varOpNode);
-                RefreshDynamicTitle();
-            });
-            extensionContainer.Add(varNameField);
+            AddVariableDropdown("対象変数", () => varOpNode.variableName, value => varOpNode.variableName = value, "演算する変数");
 
             EnumField opField = new EnumField("演算", varOpNode.operation);
             opField.RegisterValueChangedCallback(evt =>
@@ -786,18 +782,12 @@ public class StoryNodeUI : Node
                 RefreshDynamicTitle();
             });
 
-            TextField operandVarField = new TextField("参照変数")
-            {
-                value = varOpNode.operandVariableName
-            };
+            VisualElement operandVarField = CreateVariableDropdown(
+                "参照変数",
+                () => varOpNode.operandVariableName,
+                value => varOpNode.operandVariableName = value,
+                "右辺に使う変数");
             operandVarField.style.display = varOpNode.useVariableOperand ? DisplayStyle.Flex : DisplayStyle.None;
-            operandVarField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                varOpNode.operandVariableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(varOpNode);
-                RefreshDynamicTitle();
-            });
 
             useVarToggle.RegisterValueChangedCallback(evt =>
             {
@@ -815,19 +805,7 @@ public class StoryNodeUI : Node
         }
         else if (data is BoolOperationNode boolOpNode)
         {
-            TextField varNameField = new TextField("対象変数")
-            {
-                value = boolOpNode.variableName,
-                tooltip = "Variable Database の Bool 変数名"
-            };
-            varNameField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                boolOpNode.variableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(boolOpNode);
-                RefreshDynamicTitle();
-            });
-            extensionContainer.Add(varNameField);
+            AddVariableDropdown("対象変数", () => boolOpNode.variableName, value => boolOpNode.variableName = value, "On / Off / Toggle する Bool 変数");
 
             EnumField opField = new EnumField("操作", boolOpNode.operation);
             opField.RegisterValueChangedCallback(evt =>
@@ -870,19 +848,12 @@ public class StoryNodeUI : Node
                 RefreshDynamicTitle();
             });
 
-            TextField operandVarField = new TextField("参照変数")
-            {
-                value = speedNode.operandVariableName,
-                tooltip = "Float または Int の変数名"
-            };
+            VisualElement operandVarField = CreateVariableDropdown(
+                "参照変数",
+                () => speedNode.operandVariableName,
+                value => speedNode.operandVariableName = value,
+                "速度の右辺に使う変数");
             operandVarField.style.display = speedNode.useVariableOperand ? DisplayStyle.Flex : DisplayStyle.None;
-            operandVarField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                speedNode.operandVariableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(speedNode);
-                RefreshDynamicTitle();
-            });
 
             useVarToggle.RegisterValueChangedCallback(evt =>
             {
@@ -936,6 +907,7 @@ public class StoryNodeUI : Node
                             }
                         }
                         UnityEditor.EditorUtility.SetDirty(choiceNode);
+                        RefreshDynamicTitle();
                         BuildChoicePorts(choiceNode);
                         RedrawChoiceList(choiceNode, choiceListContainer);
                         EndGraphEdit();
@@ -954,6 +926,7 @@ public class StoryNodeUI : Node
                 string choiceName = $"Choice {choiceNode.choices.Count + 1}";
                 choiceNode.choices.Add(choiceName);
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
+                RefreshDynamicTitle();
                 AddOutputPort(choiceName);
                 RedrawChoiceList(choiceNode, choiceListContainer);
                 EndGraphEdit();
@@ -1089,6 +1062,55 @@ public class StoryNodeUI : Node
             });
             extensionContainer.Add(delayField);
         }
+        else if (data is VariableTextNode variableTextNode)
+        {
+            AddHelpButton("実行した瞬間の変数値を Text に書きます。UI は秒数で破棄し、Next へ進む秒数はそれとは別に指定します。");
+
+            ObjectField prefabField = new ObjectField("UI Prefab")
+            {
+                objectType = typeof(GameObject),
+                value = variableTextNode.textUIPrefab,
+                tooltip = "子階層の TextMeshPro、無ければ UI Text に値を書きます"
+            };
+            prefabField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                variableTextNode.textUIPrefab = evt.newValue as GameObject;
+                UnityEditor.EditorUtility.SetDirty(variableTextNode);
+            });
+            extensionContainer.Add(prefabField);
+            AddUiParentToggle(variableTextNode, variableTextNode.parentToUiParent, value => variableTextNode.parentToUiParent = value);
+
+            AddVariableDropdown("変数名", () => variableTextNode.variableName, value => variableTextNode.variableName = value, "実行した瞬間の値を表示します");
+
+            FloatField lifetimeField = new FloatField("破棄までの秒")
+            {
+                value = variableTextNode.lifetime,
+                tooltip = "UI を出してから AutoRelease で破棄するまでの秒。Next の待ちとは別です"
+            };
+            lifetimeField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                variableTextNode.lifetime = Mathf.Max(0f, evt.newValue);
+                lifetimeField.SetValueWithoutNotify(variableTextNode.lifetime);
+                UnityEditor.EditorUtility.SetDirty(variableTextNode);
+            });
+            extensionContainer.Add(lifetimeField);
+
+            FloatField nextField = new FloatField("Nextまでの待ち(秒)")
+            {
+                value = variableTextNode.nextDelay,
+                tooltip = "Next に進むまでの秒。表示・破棄の時間とは別に測ります"
+            };
+            nextField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                variableTextNode.nextDelay = Mathf.Max(0f, evt.newValue);
+                nextField.SetValueWithoutNotify(variableTextNode.nextDelay);
+                UnityEditor.EditorUtility.SetDirty(variableTextNode);
+            });
+            extensionContainer.Add(nextField);
+        }
         else if (data is SpawnPrefabNode spawnNode)
         {
             AddHelpButton("Choice などの出力からつなぐと、クリック位置にプレハブを出します。破棄はプレハブ側の AutoRelease が担当します。");
@@ -1183,19 +1205,7 @@ public class StoryNodeUI : Node
         }
         else if (data is ConditionBranchNode conditionBranchNode)
         {
-            TextField varNameField = new TextField("変数名")
-            {
-                value = conditionBranchNode.variableName,
-                tooltip = "判定する数値変数（Int / Float）"
-            };
-            varNameField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                conditionBranchNode.variableName = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(conditionBranchNode);
-                RefreshDynamicTitle();
-            });
-            extensionContainer.Add(varNameField);
+            AddVariableDropdown("変数名", () => conditionBranchNode.variableName, value => conditionBranchNode.variableName = value, "判定する数値変数（Int / Float）");
 
             VisualElement branchListContainer = new VisualElement();
             DropdownField opField = new DropdownField("比較", ThresholdOperatorChoices, ClampOperatorSymbol(conditionBranchNode.comparison));
@@ -1505,6 +1515,7 @@ public class StoryNodeUI : Node
                 BeginGraphEdit("選択肢名を変更");
                 choiceNode.choices[index] = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
+                RefreshDynamicTitle();
                 RenameOutputPortAt(index, evt.newValue);
                 EndGraphEdit();
             });
@@ -1517,6 +1528,7 @@ public class StoryNodeUI : Node
                     BeginGraphEdit("選択肢を削除");
                     choiceNode.choices.RemoveAt(index);
                     UnityEditor.EditorUtility.SetDirty(choiceNode);
+                    RefreshDynamicTitle();
                     RemoveOutputPortAt(index);
                     RedrawChoiceList(choiceNode, container);
                     EndGraphEdit();
@@ -1869,103 +1881,414 @@ public class StoryNodeUI : Node
         }
     }
 
-    private void DrawGotoSettings(GotoNode gotoNode)
+    /// <summary>
+    /// 変数宣言ノードの一覧。1ノードで複数の変数を宣言する。
+    /// </summary>
+    private void DrawVariableDeclareSettings(VariableDeclareNode node)
     {
-        List<LabelOption> options = new List<LabelOption>();
-        DropdownField dropdown = new DropdownField("行先")
+        AddHelpButton(node.GetHelpText());
+
+        VisualElement list = new VisualElement();
+        extensionContainer.Add(list);
+        RedrawVariableDeclarations(node, list);
+
+        Button addButton = new Button(() =>
         {
-            tooltip = "先に作成した Label（行先）ノードから選びます。"
+            BeginGraphEdit("変数を追加");
+            if (node.variables == null) node.variables = new List<VariableDeclaration>();
+            node.variables.Add(new VariableDeclaration { key = VariableDeclareNode.NextDefaultKey(node.variables) });
+            UnityEditor.EditorUtility.SetDirty(node);
+            RedrawVariableDeclarations(node, list);
+            EndGraphEdit();
+        })
+        {
+            text = "＋ 変数を追加"
         };
+        extensionContainer.Add(addButton);
+    }
 
-        void RefreshGotoDropdown()
+    private void RedrawVariableDeclarations(VariableDeclareNode node, VisualElement container)
+    {
+        container.Clear();
+        if (node.variables == null) node.variables = new List<VariableDeclaration>();
+
+        for (int i = 0; i < node.variables.Count; i++)
         {
-            options.Clear();
-            options.Add(new LabelOption { display = "(未選択)", labelGuid = "", graph = null });
-            CollectLabelOptions(options);
-
-            HashSet<string> usedDisplays = new HashSet<string>();
-            for (int i = 0; i < options.Count; i++)
+            int index = i;
+            VariableDeclaration entry = node.variables[index];
+            if (entry == null)
             {
-                LabelOption option = options[i];
-                string display = option.display;
-                if (!usedDisplays.Add(display))
-                {
-                    string graphName = option.graph != null ? option.graph.name : "graph";
-                    display = $"{option.display}  ({graphName})";
-                    if (!usedDisplays.Add(display))
-                    {
-                        string suffix = option.labelGuid.Length > 4 ? option.labelGuid.Substring(0, 4) : option.labelGuid;
-                        display = display + " " + suffix;
-                        usedDisplays.Add(display);
-                    }
+                entry = new VariableDeclaration { key = VariableDeclareNode.NextDefaultKey(node.variables) };
+                node.variables[index] = entry;
+            }
 
-                    option.display = display;
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 2;
+
+            TextField keyField = new TextField
+            {
+                value = entry.key,
+                tooltip = "変数名。他の変数ノードの一覧に出ます"
+            };
+            keyField.style.flexGrow = 1;
+            keyField.style.minWidth = 80;
+            keyField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.key = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+            });
+            row.Add(keyField);
+
+            EnumField typeField = new EnumField(entry.type)
+            {
+                tooltip = "型"
+            };
+            typeField.style.width = 70;
+            typeField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.type = (StoryVariableType)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RedrawVariableDeclarations(node, container);
+            });
+            row.Add(typeField);
+
+            row.Add(CreateDeclarationValueField(node, entry));
+
+            Button deleteButton = new Button(() =>
+            {
+                BeginGraphEdit("変数を削除");
+                if (index >= 0 && index < node.variables.Count)
+                {
+                    node.variables.RemoveAt(index);
                 }
-            }
-
-            List<string> choices = new List<string>(options.Count);
-            for (int i = 0; i < options.Count; i++)
+                UnityEditor.EditorUtility.SetDirty(node);
+                RedrawVariableDeclarations(node, container);
+                EndGraphEdit();
+            })
             {
-                choices.Add(options[i].display);
-            }
+                text = "✕"
+            };
+            deleteButton.style.width = 25;
+            row.Add(deleteButton);
+            container.Add(row);
+        }
 
-            string selected = "(未選択)";
-            for (int i = 1; i < options.Count; i++)
-            {
-                if (options[i].labelGuid == gotoNode.targetLabelGuid)
+        RefreshDynamicTitle();
+    }
+
+    private VisualElement CreateDeclarationValueField(VariableDeclareNode node, VariableDeclaration entry)
+    {
+        switch (entry.type)
+        {
+            case StoryVariableType.Bool:
+                Toggle boolField = new Toggle
                 {
-                    selected = options[i].display;
+                    value = entry.defaultBoolValue,
+                    tooltip = "初期値"
+                };
+                boolField.style.width = 48;
+                boolField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.defaultBoolValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return boolField;
+            case StoryVariableType.Float:
+                FloatField floatField = new FloatField
+                {
+                    value = entry.defaultFloatValue,
+                    tooltip = "初期値"
+                };
+                floatField.style.width = 64;
+                floatField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.defaultFloatValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return floatField;
+            case StoryVariableType.String:
+                TextField stringField = new TextField
+                {
+                    value = entry.defaultStringValue ?? "",
+                    tooltip = "初期値"
+                };
+                stringField.style.width = 80;
+                stringField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.defaultStringValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return stringField;
+            default:
+                IntegerField intField = new IntegerField
+                {
+                    value = entry.defaultIntValue,
+                    tooltip = "初期値"
+                };
+                intField.style.width = 64;
+                intField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.defaultIntValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return intField;
+        }
+    }
+
+    /// <summary>
+    /// 既存変数の選択欄。手入力はしない。クリックで Goto と同じ検索窓を開く。
+    /// 一覧に無い、いまの変数名はそのまま選択状態で残す。
+    /// </summary>
+    private void AddVariableDropdown(string label, Func<string> getValue, Action<string> setValue, string tooltip)
+    {
+        extensionContainer.Add(CreateVariableDropdown(label, getValue, setValue, tooltip));
+    }
+
+    private VisualElement CreateVariableDropdown(string label, Func<string> getValue, Action<string> setValue, string tooltip)
+    {
+        const string unset = "(未選択)";
+
+        VisualElement row = new VisualElement();
+        row.AddToClassList("unity-base-field");
+        row.AddToClassList("unity-popup-field");
+        row.AddToClassList("unity-base-popup-field");
+
+        Label fieldLabel = new Label(label)
+        {
+            tooltip = tooltip
+        };
+        fieldLabel.AddToClassList("unity-base-field__label");
+        fieldLabel.AddToClassList("unity-popup-field__label");
+        fieldLabel.AddToClassList("unity-base-popup-field__label");
+
+        VisualElement input = new VisualElement
+        {
+            tooltip = "クリックして変数を検索します。"
+        };
+        input.AddToClassList("unity-base-field__input");
+        input.AddToClassList("unity-popup-field__input");
+        input.AddToClassList("unity-base-popup-field__input");
+
+        Label valueLabel = new Label(unset)
+        {
+            pickingMode = PickingMode.Ignore
+        };
+        valueLabel.AddToClassList("unity-base-popup-field__text");
+        valueLabel.style.flexGrow = 1;
+        valueLabel.style.overflow = Overflow.Hidden;
+        valueLabel.style.textOverflow = TextOverflow.Ellipsis;
+        valueLabel.style.whiteSpace = WhiteSpace.NoWrap;
+
+        Color fieldText = new Color(0.85f, 0.85f, 0.85f);
+        fieldLabel.style.color = new StyleColor(fieldText);
+        valueLabel.style.color = new StyleColor(fieldText);
+
+        VisualElement arrow = new VisualElement { pickingMode = PickingMode.Ignore };
+        arrow.AddToClassList("unity-base-popup-field__arrow");
+        input.Add(valueLabel);
+        input.Add(arrow);
+        row.Add(fieldLabel);
+        row.Add(input);
+
+        void RefreshLabel()
+        {
+            string current = getValue() ?? "";
+            string shown = string.IsNullOrEmpty(current) ? unset : current;
+            valueLabel.text = shown;
+            input.tooltip = shown;
+            RefreshDynamicTitle();
+        }
+
+        void OpenPopup()
+        {
+            List<string> choices = StoryVariableCatalog.Collect(this);
+            string current = getValue() ?? "";
+            string desired = string.IsNullOrEmpty(current) ? unset : current;
+            if (!choices.Contains(desired))
+            {
+                choices.Insert(0, desired);
+            }
+
+            if (choices.Count == 0)
+            {
+                choices.Add(desired);
+            }
+
+            int selectedIndex = 0;
+            for (int i = 0; i < choices.Count; i++)
+            {
+                if (choices[i] == desired)
+                {
+                    selectedIndex = i;
                     break;
                 }
             }
 
-            if (selected == "(未選択)" && !string.IsNullOrEmpty(gotoNode.targetLabelGuid))
+            var snapshot = new List<string>(choices);
+            GotoDestinationPopup.Show(input, snapshot, selectedIndex, index =>
             {
-                string shortGuid = gotoNode.targetLabelGuid.Length > 8
-                    ? gotoNode.targetLabelGuid.Substring(0, 8)
-                    : gotoNode.targetLabelGuid;
-                string missing = "(欠損) " + shortGuid;
-                options.Insert(1, new LabelOption
-                {
-                    display = missing,
-                    labelGuid = gotoNode.targetLabelGuid,
-                    graph = gotoNode.targetGraph
-                });
-                choices.Insert(1, missing);
-                selected = missing;
-            }
+                if (index < 0 || index >= snapshot.Count) return;
 
-            dropdown.choices = choices;
-            dropdown.SetValueWithoutNotify(selected);
-            RefreshDynamicTitle();
+                string picked = snapshot[index];
+                if (string.IsNullOrEmpty(picked) || picked == unset) return;
+                if (picked == (getValue() ?? ""))
+                {
+                    RefreshLabel();
+                    return;
+                }
+
+                RecordNodeUndo();
+                setValue(picked);
+                UnityEditor.EditorUtility.SetDirty(data);
+                RefreshLabel();
+            }, "Dlair.VariablePicker.Query", "変数名で絞り込みます。");
         }
 
-        dropdown.RegisterValueChangedCallback(evt =>
+        input.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
+        input.RegisterCallback<PointerUpEvent>(evt =>
+        {
+            if (evt.button != 0) return;
+            OpenPopup();
+            evt.StopPropagation();
+        });
+        row.RegisterCallback<MouseEnterEvent>(_ => RefreshLabel());
+        RegisterCallback<AttachToPanelEvent>(_ => RefreshLabel());
+        RegisterCallback<DetachFromPanelEvent>(_ => GotoDestinationPopup.Close());
+
+        RefreshLabel();
+        return row;
+    }
+
+    private void DrawGotoSettings(GotoNode gotoNode)
+    {
+        List<LabelOption> options = new List<LabelOption>();
+
+        VisualElement row = new VisualElement();
+        row.AddToClassList("unity-base-field");
+        row.AddToClassList("unity-popup-field");
+        row.AddToClassList("unity-base-popup-field");
+
+        Label fieldLabel = new Label("行先")
+        {
+            tooltip = "先に作成した Label（行先）ノードから選びます。"
+        };
+        fieldLabel.AddToClassList("unity-base-field__label");
+        fieldLabel.AddToClassList("unity-popup-field__label");
+        fieldLabel.AddToClassList("unity-base-popup-field__label");
+
+        VisualElement input = new VisualElement
+        {
+            tooltip = "クリックして行先を検索します。"
+        };
+        input.AddToClassList("unity-base-field__input");
+        input.AddToClassList("unity-popup-field__input");
+        input.AddToClassList("unity-base-popup-field__input");
+
+        Label valueLabel = new Label("(未選択)")
+        {
+            pickingMode = PickingMode.Ignore
+        };
+        valueLabel.AddToClassList("unity-base-popup-field__text");
+        valueLabel.style.flexGrow = 1;
+        valueLabel.style.overflow = Overflow.Hidden;
+        valueLabel.style.textOverflow = TextOverflow.Ellipsis;
+        valueLabel.style.whiteSpace = WhiteSpace.NoWrap;
+
+        Color fieldText = new Color(0.85f, 0.85f, 0.85f);
+        fieldLabel.style.color = new StyleColor(fieldText);
+        valueLabel.style.color = new StyleColor(fieldText);
+
+        VisualElement arrow = new VisualElement { pickingMode = PickingMode.Ignore };
+        arrow.AddToClassList("unity-base-popup-field__arrow");
+        input.Add(valueLabel);
+        input.Add(arrow);
+        row.Add(fieldLabel);
+        row.Add(input);
+
+        void RefreshButtonLabel()
+        {
+            RebuildGotoOptions(gotoNode, options);
+            string selected = "(未選択)";
+            if (string.IsNullOrEmpty(gotoNode.targetLabelGuid))
             {
-                RecordNodeUndo();
-            LabelOption picked = options.Find(o => o.display == evt.newValue);
-            if (picked == null || string.IsNullOrEmpty(picked.labelGuid))
-            {
-                gotoNode.targetLabelGuid = "";
-                gotoNode.targetGraph = null;
+                selected = options.Count > 0 ? options[0].display : selected;
             }
             else
             {
-                gotoNode.targetLabelGuid = picked.labelGuid;
-                gotoNode.targetGraph = picked.graph;
+                for (int i = 1; i < options.Count; i++)
+                {
+                    if (options[i].labelGuid == gotoNode.targetLabelGuid)
+                    {
+                        selected = options[i].display;
+                        break;
+                    }
+                }
             }
 
-            UnityEditor.EditorUtility.SetDirty(gotoNode);
+            valueLabel.text = selected;
+            input.tooltip = selected;
             RefreshDynamicTitle();
+        }
+
+        void OpenPopup()
+        {
+            RebuildGotoOptions(gotoNode, options);
+            var snapshot = new List<LabelOption>(options.Count);
+            var labels = new string[options.Count];
+            int selectedIndex = 0;
+            for (int i = 0; i < options.Count; i++)
+            {
+                snapshot.Add(options[i]);
+                labels[i] = options[i].display;
+                if (i > 0 && options[i].labelGuid == gotoNode.targetLabelGuid)
+                    selectedIndex = i;
+            }
+
+            GotoDestinationPopup.Show(input, labels, selectedIndex, index =>
+            {
+                if (index < 0 || index >= snapshot.Count) return;
+
+                RecordNodeUndo();
+                LabelOption picked = snapshot[index];
+                if (picked == null || string.IsNullOrEmpty(picked.labelGuid))
+                {
+                    gotoNode.targetLabelGuid = "";
+                    gotoNode.targetGraph = null;
+                }
+                else
+                {
+                    gotoNode.targetLabelGuid = picked.labelGuid;
+                    gotoNode.targetGraph = picked.graph;
+                }
+
+                UnityEditor.EditorUtility.SetDirty(gotoNode);
+                RefreshButtonLabel();
+            });
+        }
+
+        input.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
+        input.RegisterCallback<PointerUpEvent>(evt =>
+        {
+            if (evt.button != 0) return;
+            OpenPopup();
+            evt.StopPropagation();
         });
+        row.RegisterCallback<MouseEnterEvent>(_ => RefreshButtonLabel());
+        RegisterCallback<AttachToPanelEvent>(_ => RefreshButtonLabel());
+        RegisterCallback<DetachFromPanelEvent>(_ => GotoDestinationPopup.Close());
 
-        dropdown.RegisterCallback<MouseEnterEvent>(_ => RefreshGotoDropdown());
-        dropdown.RegisterCallback<FocusInEvent>(_ => RefreshGotoDropdown());
-        RegisterCallback<AttachToPanelEvent>(_ => RefreshGotoDropdown());
+        extensionContainer.Add(row);
 
-        extensionContainer.Add(dropdown);
-
-        Label hint = new Label("行先ノードを先に作ると、このリストに表示されます。")
+        Label hint = new Label("クリックすると検索できます。行先ノードを先に作るとリストに出ます。")
         {
             style =
             {
@@ -1976,7 +2299,57 @@ public class StoryNodeUI : Node
         };
         extensionContainer.Add(hint);
 
-        RefreshGotoDropdown();
+        RefreshButtonLabel();
+    }
+
+    private void RebuildGotoOptions(GotoNode gotoNode, List<LabelOption> options)
+    {
+        options.Clear();
+        options.Add(new LabelOption { display = "(未選択)", labelGuid = "", graph = null });
+        CollectLabelOptions(options);
+
+        HashSet<string> usedDisplays = new HashSet<string>();
+        for (int i = 0; i < options.Count; i++)
+        {
+            LabelOption option = options[i];
+            string display = option.display;
+            if (!usedDisplays.Add(display))
+            {
+                string graphName = option.graph != null ? option.graph.name : "graph";
+                display = $"{option.display}  ({graphName})";
+                if (!usedDisplays.Add(display))
+                {
+                    string suffix = option.labelGuid.Length > 4 ? option.labelGuid.Substring(0, 4) : option.labelGuid;
+                    display = display + " " + suffix;
+                    usedDisplays.Add(display);
+                }
+
+                option.display = display;
+            }
+        }
+
+        bool found = string.IsNullOrEmpty(gotoNode.targetLabelGuid);
+        for (int i = 1; i < options.Count; i++)
+        {
+            if (options[i].labelGuid == gotoNode.targetLabelGuid)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            string shortGuid = gotoNode.targetLabelGuid.Length > 8
+                ? gotoNode.targetLabelGuid.Substring(0, 8)
+                : gotoNode.targetLabelGuid;
+            options.Insert(1, new LabelOption
+            {
+                display = "(欠損) " + shortGuid,
+                labelGuid = gotoNode.targetLabelGuid,
+                graph = gotoNode.targetGraph
+            });
+        }
     }
 
     private void CollectLabelOptions(List<LabelOption> options)
@@ -2038,6 +2411,12 @@ public class StoryNodeUI : Node
 
     private StoryGraph ResolveOwnerGraph()
     {
+        StoryGraphView storyView = GetFirstAncestorOfType<StoryGraphView>();
+        if (storyView != null && storyView.CurrentGraph != null)
+        {
+            return storyView.CurrentGraph;
+        }
+
         if (data == null) return null;
 
         string path = UnityEditor.AssetDatabase.GetAssetPath(data);

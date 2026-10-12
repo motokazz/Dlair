@@ -12,7 +12,7 @@ public class StoryPlayer : MonoBehaviour
     public DualVideoPlayer dualPlayer;
     public StoryVariableDatabase variableDatabase;
     public Canvas uiCanvas;
-    [Tooltip("Choice / Text / Spawn(UI) の生成先。空なら Canvas 直下")]
+    [Tooltip("Choice / Text / Variable Text / Spawn(UI) の生成先。空なら Canvas 直下")]
     public RectTransform uiParent;
 
     [Header("Debug / Collection")]
@@ -42,6 +42,19 @@ public class StoryPlayer : MonoBehaviour
     public void ExecuteNode(BaseNode node)
     {
         if (node == null) return;
+
+        if (currentNode != null && currentNode != node)
+        {
+            if (currentNode is WaitNode waitNode)
+            {
+                waitNode.StopWait(this);
+            }
+            else if (currentNode is VariableTextNode variableTextNode)
+            {
+                variableTextNode.StopNextWait(this);
+            }
+        }
+
         currentNode = node;
         node.Execute(this);
     }
@@ -227,7 +240,8 @@ public class StoryPlayer : MonoBehaviour
     {
         if (prefab == null) return null;
 
-        GameObject instance = Instantiate(prefab, parent);
+        GameObject instance = parent != null ? Instantiate(prefab, parent, false) : Instantiate(prefab);
+        PrefabPool.AlignSpawnedUi(instance, parent);
         RegisterSpawned(instance);
         return instance;
     }
@@ -477,10 +491,8 @@ public class StoryPlayer : MonoBehaviour
 
     private void Start()
     {
-        if (variableDatabase != null)
-        {
-            GameManager.InitializeFromDatabase(variableDatabase);
-        }
+        GameSave.ApplyStoryDatabase(variableDatabase);
+        VariableDeclareNode.ApplyMissingInGraph(graph);
 
         StartCoroutine(InitAndPlay());
     }
@@ -505,34 +517,34 @@ public class StoryPlayer : MonoBehaviour
         if (startNode != null) ExecuteNode(startNode);
     }
 
-    public void PlayVideo(VideoClip clip, BaseNode node, bool isLooping = false, float portOutputTime = -1f, AudioClip audioClip = null, float crossFadeDuration = 1.0f)
+    public void PlayVideo(VideoClip clip, BaseNode node, bool isLooping = false, float portOutputTime = -1f, AudioClip audioClip = null, float crossFadeDuration = 1.0f, StoryAudioBus audioBus = StoryAudioBus.BGM)
     {
         if (clip == null) return;
         currentNode = node;
         float fade = Mathf.Max(0f, crossFadeDuration);
-        StartOrTransitionMedia(false, clip, null, isLooping, audioClip, fade);
+        StartOrTransitionMedia(false, clip, null, isLooping, audioClip, fade, audioBus);
         BeginPortOutput(portOutputTime, (float)clip.length, fade, true);
     }
 
-    public void PlayImage(Texture2D image, float duration, AudioClip audioClip, bool isLooping, float crossFadeDuration, BaseNode node, float portOutputTime)
+    public void PlayImage(Texture2D image, float duration, AudioClip audioClip, bool isLooping, float crossFadeDuration, BaseNode node, float portOutputTime, StoryAudioBus audioBus = StoryAudioBus.BGM)
     {
         if (image == null) return;
         currentNode = node;
         float fade = Mathf.Max(0f, crossFadeDuration);
-        StartOrTransitionMedia(true, null, image, isLooping, audioClip, fade);
+        StartOrTransitionMedia(true, null, image, isLooping, audioClip, fade, audioBus);
         BeginPortOutput(portOutputTime, duration, fade, false);
     }
 
-    private void StartOrTransitionMedia(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip audioClip, float fadeDuration)
+    private void StartOrTransitionMedia(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip audioClip, float fadeDuration, StoryAudioBus audioBus)
     {
         if (!hasStartedMedia)
         {
-            dualPlayer.PlayFirstMedia(isStaticImage, clip, image, isLooping, audioClip);
+            dualPlayer.PlayFirstMedia(isStaticImage, clip, image, isLooping, audioClip, audioBus);
             hasStartedMedia = true;
         }
         else
         {
-            dualPlayer.RequestPlayNextMedia(isStaticImage, clip, image, isLooping, audioClip, fadeDuration);
+            dualPlayer.RequestPlayNextMedia(isStaticImage, clip, image, isLooping, audioClip, fadeDuration, audioBus);
         }
     }
 

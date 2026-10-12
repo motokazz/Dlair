@@ -51,14 +51,15 @@ public class StoryGraphCloneWindow : EditorWindow
         RefreshPreview();
     }
 
+    private void OnSelectionChange()
+    {
+        RefreshPreview();
+    }
+
     private void OnGUI()
     {
         EditorGUILayout.Space(6);
-        EditorGUILayout.HelpBox(
-            "指定した StoryGraph と、そこから辿れる SubGraph / Goto 先の関連グラフをすべて複製します。\n" +
-            "複製後はサブグラフ参照と Goto 先が新しいグラフを指すので、元のグラフとは独立して同じ挙動を再現できます。\n" +
-            "動画・画像などのメディアアセット自体は共有したままです。",
-            MessageType.Info);
+        EditorGUILayout.HelpBox(StoryGraphCloneUtility.Summary, MessageType.Info);
 
         EditorGUI.BeginChangeCheck();
         sourceGraph = (StoryGraph)EditorGUILayout.ObjectField("複製元 Graph", sourceGraph, typeof(StoryGraph), false);
@@ -140,7 +141,7 @@ public class StoryGraphCloneWindow : EditorWindow
                 StoryGraph graph = previewGraphs[i];
                 if (graph == null) continue;
                 string path = AssetDatabase.GetAssetPath(graph);
-                string label = i == 0 ? "ルート  " : "関連    ";
+                string label = i == 0 ? "ルート  " : "選択    ";
                 EditorGUILayout.LabelField(label + graph.name, path);
             }
         }

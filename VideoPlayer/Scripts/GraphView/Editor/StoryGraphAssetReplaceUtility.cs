@@ -4,8 +4,19 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
+/// <summary>
+/// Project ウィンドウで選択している StoryGraph だけを対象に、ノードが参照するアセットを
+/// 指定フォルダ内の候補へ差し替える。
+/// 選択したグラフが参照している別の StoryGraph は対象に含めない。
+/// </summary>
 public static class StoryGraphAssetReplaceUtility
 {
+    public const string Summary =
+        "処理対象は、Project ウィンドウで選択している StoryGraph だけです。\n" +
+        "選択したグラフが参照している別の StoryGraph は対象外です。\n" +
+        "選択中グラフ内の Prefab / Image / VideoClip / AudioClip などを、指定フォルダ内の同名または部分一致アセットに差し替えます。\n" +
+        "型が合うものだけが対象です。実行前にプレビューで確認できます。";
+
     public enum MatchMode
     {
         ExactOnly,
@@ -58,17 +69,40 @@ public static class StoryGraphAssetReplaceUtility
         public readonly List<string> warnings = new List<string>();
     }
 
+    /// <summary>
+    /// Project ウィンドウで選択中の StoryGraph を返す。フォルダ配下やリンク先は展開しない。
+    /// </summary>
+    public static List<StoryGraph> CollectSelectedGraphs()
+    {
+        List<StoryGraph> graphs = new List<StoryGraph>();
+        StoryGraph[] selected = Selection.GetFiltered<StoryGraph>(SelectionMode.Assets);
+        if (selected == null || selected.Length == 0) return graphs;
+
+        HashSet<StoryGraph> seen = new HashSet<StoryGraph>();
+        for (int i = 0; i < selected.Length; i++)
+        {
+            StoryGraph graph = selected[i];
+            if (graph == null || !seen.Add(graph)) continue;
+            graphs.Add(graph);
+        }
+
+        return graphs;
+    }
+
+    /// <summary>
+    /// 渡された StoryGraph だけを走査する。リンク先のグラフは追わない。
+    /// </summary>
     public static Preview BuildPreview(
-        StoryGraph source,
+        IList<StoryGraph> graphs,
         string folderPath,
-        bool includeRelatedGraphs,
         bool includeSubfolders,
         MatchMode matchMode)
     {
         Preview preview = new Preview();
-        if (source == null)
+        List<StoryGraph> targets = DistinctGraphs(graphs);
+        if (targets.Count == 0)
         {
-            preview.warnings.Add("対象 Graph が指定されていません。");
+            preview.warnings.Add("Project ウィンドウで StoryGraph を選択してください。選択したグラフが参照している別の StoryGraph は対象外です。");
             return preview;
         }
 
@@ -79,10 +113,6 @@ public static class StoryGraphAssetReplaceUtility
             return preview;
         }
 
-        List<StoryGraph> graphs = includeRelatedGraphs
-            ? StoryGraphCloneUtility.CollectRelatedGraphs(source)
-            : new List<StoryGraph> { source };
-
         List<Candidate> candidates = CollectFolderAssets(folderPath, includeSubfolders);
         preview.candidateCount = candidates.Count;
         if (candidates.Count == 0)
@@ -91,9 +121,9 @@ public static class StoryGraphAssetReplaceUtility
         }
 
         HashSet<string> seen = new HashSet<string>();
-        for (int i = 0; i < graphs.Count; i++)
+        for (int i = 0; i < targets.Count; i++)
         {
-            CollectFromGraph(graphs[i], folderPath, candidates, matchMode, preview, seen);
+            CollectFromGraph(targets[i], folderPath, candidates, matchMode, preview, seen);
         }
 
         return preview;
@@ -162,6 +192,22 @@ public static class StoryGraphAssetReplaceUtility
             if (!affected.Contains(window.currentGraph)) continue;
             window.ReloadFromAsset();
         }
+    }
+
+    private static List<StoryGraph> DistinctGraphs(IList<StoryGraph> graphs)
+    {
+        List<StoryGraph> targets = new List<StoryGraph>();
+        if (graphs == null) return targets;
+
+        HashSet<StoryGraph> seen = new HashSet<StoryGraph>();
+        for (int i = 0; i < graphs.Count; i++)
+        {
+            StoryGraph graph = graphs[i];
+            if (graph == null || !seen.Add(graph)) continue;
+            targets.Add(graph);
+        }
+
+        return targets;
     }
 
     private static void CollectFromGraph(
