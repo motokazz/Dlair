@@ -7,6 +7,10 @@ public enum BoolOperation
     Toggle
 }
 
+/// <summary>
+/// Bool 変数を On / Off / Toggle する。
+/// 変数名はデータベースか変数宣言ノードから選ぶ。
+/// </summary>
 public class BoolOperationNode : BaseNode
 {
     public string variableName = "Flag";

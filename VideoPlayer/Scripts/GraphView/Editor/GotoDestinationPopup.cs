@@ -10,24 +10,46 @@ public static class GotoDestinationPopup
     private const float RowHeight = 22f;
     private const int MaxVisibleRows = 12;
     private const float SearchRowHeight = 24f;
+    private const string QueryPrefsKey = "Dlair.GotoDestinationPopup.Query";
 
     private static VisualElement currentOverlay;
+    private static Controller current;
+    private static string activePrefsKey = QueryPrefsKey;
+    private static string lastQuery = EditorPrefs.GetString(QueryPrefsKey, string.Empty);
 
     public static void Close()
     {
+        if (current != null)
+        {
+            Remember(current.Query);
+            current = null;
+        }
+
         if (currentOverlay == null) return;
         currentOverlay.RemoveFromHierarchy();
         currentOverlay = null;
     }
 
-    public static void Show(VisualElement anchor, IReadOnlyList<string> choices, int selectedIndex, Action<int> onSelected)
+    private static void Remember(string query)
+    {
+        lastQuery = query ?? string.Empty;
+        EditorPrefs.SetString(activePrefsKey, lastQuery);
+    }
+
+    /// <summary>
+    /// 検索付きの選択一覧を開く。検索文字は prefsKey ごとに覚え、次に開いたときも入っている。
+    /// </summary>
+    public static void Show(VisualElement anchor, IReadOnlyList<string> choices, int selectedIndex, Action<int> onSelected, string queryPrefsKey = null, string searchTooltip = null)
     {
         if (anchor?.panel == null || choices == null || onSelected == null) return;
 
         Close();
+        activePrefsKey = string.IsNullOrEmpty(queryPrefsKey) ? QueryPrefsKey : queryPrefsKey;
+        lastQuery = EditorPrefs.GetString(activePrefsKey, string.Empty);
 
         VisualElement root = anchor.panel.visualTree;
-        var controller = new Controller(root, anchor, choices, selectedIndex, onSelected);
+        var controller = new Controller(root, anchor, choices, selectedIndex, onSelected, searchTooltip);
+        current = controller;
         currentOverlay = controller.Overlay;
         root.Add(currentOverlay);
         controller.Open();
@@ -44,18 +66,25 @@ public static class GotoDestinationPopup
 
         private readonly VisualElement popup;
         private readonly ToolbarSearchField search;
-        private readonly ScrollView scroll;
+        private readonly VisualElement listHost;
+        private readonly VisualElement viewport;
+        private readonly VisualElement content;
+        private readonly VisualElement scrollbar;
+        private readonly VisualElement thumb;
         private readonly int selectedIndex;
 
         private readonly Color textColor;
-        private readonly Color mutedColor;
         private int highlight;
         private bool placing;
+        private bool draggingThumb;
+        private float dragStartY;
+        private float dragStartOffset;
         private float listHeight = RowHeight;
+        private float scrollOffset;
 
         public VisualElement Overlay { get; }
 
-        public Controller(VisualElement root, VisualElement anchor, IReadOnlyList<string> choices, int selectedIndex, Action<int> onSelected)
+        public Controller(VisualElement root, VisualElement anchor, IReadOnlyList<string> choices, int selectedIndex, Action<int> onSelected, string searchTooltip)
         {
             this.root = root;
             this.anchor = anchor;
@@ -72,9 +101,8 @@ public static class GotoDestinationPopup
             Overlay.style.bottom = 0;
 
             bool pro = EditorGUIUtility.isProSkin;
-            textColor = pro ? new Color(0.9f, 0.9f, 0.9f) : new Color(0.13f, 0.13f, 0.13f);
-            mutedColor = pro ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.35f, 0.35f, 0.35f);
-            Color popupBg = pro ? new Color(0.196f, 0.196f, 0.196f, 1f) : new Color(0.78f, 0.78f, 0.78f, 1f);
+            textColor = Color.white;
+            Color popupBg = pro ? new Color(0.196f, 0.196f, 0.196f, 1f) : new Color(0.22f, 0.22f, 0.22f, 1f);
             Color popupBorder = pro ? new Color(0.08f, 0.08f, 0.08f, 1f) : new Color(0.55f, 0.55f, 0.55f, 1f);
 
             popup = new VisualElement { name = "goto-destination-popup", pickingMode = PickingMode.Position };
@@ -111,22 +139,98 @@ public static class GotoDestinationPopup
                     color = new StyleColor(textColor)
                 }
             };
-            search = new ToolbarSearchField { tooltip = "行先の名前で絞り込みます。" };
+            search = new ToolbarSearchField
+            {
+                tooltip = string.IsNullOrEmpty(searchTooltip) ? "行先の名前で絞り込みます。" : searchTooltip
+            };
             search.style.color = new StyleColor(textColor);
             search.style.flexGrow = 1;
             searchRow.Add(searchLabel);
             searchRow.Add(search);
 
-            scroll = new ScrollView(ScrollViewMode.Vertical)
+            listHost = new VisualElement();
+            listHost.style.flexDirection = FlexDirection.Row;
+            listHost.style.flexGrow = 0;
+            listHost.style.flexShrink = 0;
+            listHost.style.alignItems = Align.Stretch;
+
+            viewport = new VisualElement();
+            viewport.style.flexGrow = 1;
+            viewport.style.flexShrink = 1;
+            viewport.style.overflow = Overflow.Hidden;
+            viewport.style.position = Position.Relative;
+
+            content = new VisualElement();
+            content.style.position = Position.Absolute;
+            content.style.left = 0;
+            content.style.right = 0;
+            content.style.flexDirection = FlexDirection.Column;
+            content.style.flexGrow = 0;
+            content.style.flexShrink = 0;
+            content.style.justifyContent = Justify.FlexStart;
+            viewport.Add(content);
+
+            scrollbar = new VisualElement();
+            scrollbar.style.width = 16;
+            scrollbar.style.flexShrink = 0;
+            scrollbar.style.marginLeft = 4;
+            scrollbar.style.backgroundColor = new StyleColor(new Color(0.08f, 0.08f, 0.08f, 1f));
+            scrollbar.style.borderTopLeftRadius = 3;
+            scrollbar.style.borderTopRightRadius = 3;
+            scrollbar.style.borderBottomLeftRadius = 3;
+            scrollbar.style.borderBottomRightRadius = 3;
+
+            thumb = new VisualElement();
+            thumb.style.position = Position.Absolute;
+            thumb.style.left = 2;
+            thumb.style.right = 2;
+            thumb.style.backgroundColor = new StyleColor(new Color(0.92f, 0.92f, 0.92f, 1f));
+            thumb.style.borderTopLeftRadius = 3;
+            thumb.style.borderTopRightRadius = 3;
+            thumb.style.borderBottomLeftRadius = 3;
+            thumb.style.borderBottomRightRadius = 3;
+            scrollbar.Add(thumb);
+
+            thumb.RegisterCallback<PointerDownEvent>(evt =>
             {
-                mouseWheelScrollSize = 18f,
-                horizontalScrollerVisibility = ScrollerVisibility.Hidden,
-                verticalScrollerVisibility = ScrollerVisibility.Auto
-            };
-            scroll.style.flexShrink = 0;
+                if (evt.button != 0) return;
+                draggingThumb = true;
+                dragStartY = evt.position.y;
+                dragStartOffset = scrollOffset;
+                thumb.CapturePointer(evt.pointerId);
+                evt.StopPropagation();
+            });
+            thumb.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!draggingThumb) return;
+                float travel = ThumbTravel();
+                float maxScroll = MaxScroll();
+                if (travel <= 0.1f || maxScroll <= 0f) return;
+                float dy = evt.position.y - dragStartY;
+                SetScroll(dragStartOffset + dy / travel * maxScroll);
+                evt.StopPropagation();
+            });
+            thumb.RegisterCallback<PointerUpEvent>(evt =>
+            {
+                if (!draggingThumb) return;
+                draggingThumb = false;
+                thumb.ReleasePointer(evt.pointerId);
+                evt.StopPropagation();
+            });
+            scrollbar.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0 || evt.target == thumb) return;
+                float localY = scrollbar.WorldToLocal(evt.position).y;
+                float page = listHeight;
+                SetScroll(localY < thumb.layout.y ? scrollOffset - page : scrollOffset + page);
+                evt.StopPropagation();
+            });
+
+            listHost.Add(viewport);
+            listHost.Add(scrollbar);
 
             popup.Add(searchRow);
-            popup.Add(scroll);
+            popup.Add(listHost);
             Overlay.Add(popup);
 
             Overlay.RegisterCallback<PointerDownEvent>(evt =>
@@ -137,12 +241,19 @@ public static class GotoDestinationPopup
             Overlay.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
             Overlay.RegisterCallback<WheelEvent>(OnWheel, TrickleDown.TrickleDown);
             popup.RegisterCallback<GeometryChangedEvent>(_ => Place());
-            search.RegisterValueChangedCallback(evt => Rebuild(evt.newValue));
+            search.RegisterValueChangedCallback(evt =>
+            {
+                Remember(evt.newValue);
+                Rebuild(lastQuery);
+            });
         }
+
+        public string Query => search != null ? search.value : string.Empty;
 
         public void Open()
         {
-            Rebuild(string.Empty);
+            search.SetValueWithoutNotify(lastQuery);
+            Rebuild(lastQuery);
             Place();
             Overlay.BringToFront();
             search.schedule.Execute(() =>
@@ -188,18 +299,57 @@ public static class GotoDestinationPopup
         private void OnWheel(WheelEvent evt)
         {
             if (Mathf.Approximately(evt.delta.y, 0f)) return;
-
-            Scroller scroller = scroll.verticalScroller;
-            float direction = scroller.lowValue < scroller.highValue ? 1f : -1f;
-            scroller.value += evt.delta.y * direction * scroll.mouseWheelScrollSize;
+            SetScroll(scrollOffset + evt.delta.y * RowHeight);
             evt.StopImmediatePropagation();
+        }
+
+        private float ContentHeight()
+        {
+            return Mathf.Max(filtered.Count, 1) * RowHeight;
+        }
+
+        private float MaxScroll()
+        {
+            return Mathf.Max(0f, ContentHeight() - listHeight);
+        }
+
+        private float ThumbTravel()
+        {
+            float thumbHeight = thumb.resolvedStyle.height;
+            if (float.IsNaN(thumbHeight) || thumbHeight < 1f)
+                thumbHeight = thumb.layout.height;
+            return Mathf.Max(0f, listHeight - thumbHeight);
+        }
+
+        private void SetScroll(float value)
+        {
+            scrollOffset = Mathf.Clamp(value, 0f, MaxScroll());
+            content.style.top = -scrollOffset;
+            PlaceThumb();
+        }
+
+        private void PlaceThumb()
+        {
+            float contentHeight = ContentHeight();
+            bool overflow = contentHeight > listHeight + 0.5f;
+            scrollbar.style.display = overflow ? DisplayStyle.Flex : DisplayStyle.None;
+            scrollbar.style.height = listHeight;
+            if (!overflow) return;
+
+            float thumbHeight = Mathf.Clamp(listHeight * listHeight / contentHeight, 28f, listHeight);
+            float travel = Mathf.Max(0f, listHeight - thumbHeight);
+            float maxScroll = MaxScroll();
+            float top = maxScroll <= 0f ? 0f : scrollOffset / maxScroll * travel;
+            thumb.style.height = thumbHeight;
+            thumb.style.top = top;
         }
 
         private void Rebuild(string query)
         {
             filtered.Clear();
             rows.Clear();
-            scroll.contentContainer.Clear();
+            content.Clear();
+            scrollOffset = 0f;
 
             string needle = string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim();
             for (int i = 0; i < choices.Count; i++)
@@ -210,26 +360,22 @@ public static class GotoDestinationPopup
                 filtered.Add(i);
             }
 
-            int visible = Mathf.Max(filtered.Count, 1);
-            listHeight = Mathf.Min(visible, MaxVisibleRows) * RowHeight;
-            scroll.style.height = listHeight;
-            scroll.verticalScrollerVisibility = filtered.Count > MaxVisibleRows
-                ? ScrollerVisibility.AlwaysVisible
-                : ScrollerVisibility.Auto;
+            int rowCount = Mathf.Max(filtered.Count, 1);
+            float contentHeight = rowCount * RowHeight;
+            listHeight = Mathf.Min(rowCount, MaxVisibleRows) * RowHeight;
+            listHost.style.height = listHeight;
+            viewport.style.height = listHeight;
+            content.style.height = contentHeight;
+            content.style.top = 0;
+            PlaceThumb();
 
             if (filtered.Count == 0)
             {
-                var empty = new Label("該当なし")
-                {
-                    style =
-                    {
-                        height = RowHeight,
-                        paddingLeft = 6,
-                        unityTextAlign = TextAnchor.MiddleLeft,
-                        color = new StyleColor(mutedColor)
-                    }
-                };
-                scroll.contentContainer.Add(empty);
+                var empty = new Label("該当なし");
+                LockRow(empty);
+                empty.style.paddingLeft = 6;
+                empty.style.color = new StyleColor(Color.white);
+                content.Add(empty);
                 highlight = -1;
                 return;
             }
@@ -253,27 +399,18 @@ public static class GotoDestinationPopup
                 int rowIndex = i;
                 string display = choices[sourceIndex] ?? string.Empty;
                 var row = new VisualElement();
-                row.style.flexDirection = FlexDirection.Row;
-                row.style.alignItems = Align.Center;
-                row.style.height = RowHeight;
-                row.style.paddingLeft = 6;
-                row.style.paddingRight = 6;
+                LockRow(row);
                 row.tooltip = display;
 
                 bool isCurrent = sourceIndex == selectedIndex;
                 var label = new Label(isCurrent ? "✓  " + display : display)
                 {
-                    pickingMode = PickingMode.Ignore,
-                    style =
-                    {
-                        flexGrow = 1,
-                        overflow = Overflow.Hidden,
-                        textOverflow = TextOverflow.Ellipsis,
-                        whiteSpace = WhiteSpace.NoWrap,
-                        unityTextAlign = TextAnchor.MiddleLeft,
-                        color = new StyleColor(textColor)
-                    }
+                    pickingMode = PickingMode.Ignore
                 };
+                label.style.color = new StyleColor(Color.white);
+                label.style.flexGrow = 1;
+                label.style.flexShrink = 0;
+                label.style.unityTextAlign = TextAnchor.MiddleLeft;
                 row.Add(label);
                 row.RegisterCallback<PointerEnterEvent>(_ => SetHighlight(rowIndex));
                 row.RegisterCallback<PointerUpEvent>(evt =>
@@ -284,7 +421,7 @@ public static class GotoDestinationPopup
                 });
 
                 rows.Add(row);
-                scroll.contentContainer.Add(row);
+                content.Add(row);
             }
 
             highlight = -1;
@@ -312,24 +449,22 @@ public static class GotoDestinationPopup
 
             if (highlight < 0 || highlight >= rows.Count) return;
 
-            VisualElement row = rows[highlight];
-            scroll.schedule.Execute(() =>
-            {
-                if (row.panel != null)
-                    scroll.ScrollTo(row);
-            });
+            float rowTop = highlight * RowHeight;
+            float rowBottom = rowTop + RowHeight;
+            if (rowTop < scrollOffset)
+                SetScroll(rowTop);
+            else if (rowBottom > scrollOffset + listHeight)
+                SetScroll(rowBottom - listHeight);
+            else
+                PlaceThumb();
         }
 
         private void ApplyRowColor(int index)
         {
             bool on = index == highlight;
             rows[index].style.backgroundColor = on
-                ? new StyleColor(new Color(0.17f, 0.36f, 0.53f, 1f))
+                ? new StyleColor(new Color(0.24f, 0.46f, 0.72f, 1f))
                 : new StyleColor(new Color(0f, 0f, 0f, 0f));
-
-            Label label = rows[index].Q<Label>();
-            if (label != null)
-                label.style.color = new StyleColor(on ? Color.white : textColor);
         }
 
         private void ApplySearchTextColor()
@@ -349,6 +484,15 @@ public static class GotoDestinationPopup
             int count = element.childCount;
             for (int i = 0; i < count; i++)
                 PaintText(element[i], color);
+        }
+
+        private static void LockRow(VisualElement row)
+        {
+            row.style.flexGrow = 0;
+            row.style.flexShrink = 0;
+            row.style.height = RowHeight;
+            row.style.minHeight = RowHeight;
+            row.style.maxHeight = RowHeight;
         }
 
         private void Confirm()

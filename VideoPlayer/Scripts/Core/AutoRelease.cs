@@ -10,15 +10,28 @@ public class AutoRelease : MonoBehaviour
     public bool waitForParticles;
 
     private Coroutine routine;
+    private bool useOverride;
+    private float overrideLifetime;
+
+    /// <summary>
+    /// この表示だけ、パーティクル待ちを使わず指定秒で破棄する。プレハブに書いた lifetime は変えない。
+    /// </summary>
+    public void BeginLifetime(float seconds)
+    {
+        useOverride = true;
+        overrideLifetime = Mathf.Max(0f, seconds);
+        if (!isActiveAndEnabled) return;
+        RestartRoutine();
+    }
 
     private void OnEnable()
     {
-        if (routine != null) StopCoroutine(routine);
-        routine = StartCoroutine(ReleaseRoutine());
+        RestartRoutine();
     }
 
     private void OnDisable()
     {
+        useOverride = false;
         if (routine != null)
         {
             StopCoroutine(routine);
@@ -26,9 +39,19 @@ public class AutoRelease : MonoBehaviour
         }
     }
 
+    private void RestartRoutine()
+    {
+        if (routine != null) StopCoroutine(routine);
+        routine = StartCoroutine(ReleaseRoutine());
+    }
+
     private IEnumerator ReleaseRoutine()
     {
-        if (waitForParticles)
+        bool timed = useOverride || !waitForParticles;
+        float seconds = useOverride ? overrideLifetime : lifetime;
+        useOverride = false;
+
+        if (!timed)
         {
             yield return null;
             ParticleSystem[] systems = GetComponentsInChildren<ParticleSystem>(true);
@@ -39,7 +62,7 @@ public class AutoRelease : MonoBehaviour
         }
         else
         {
-            if (lifetime > 0f) yield return new WaitForSeconds(lifetime);
+            if (seconds > 0f) yield return new WaitForSeconds(seconds);
             else yield return null;
         }
 

@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
@@ -41,6 +42,8 @@ public class DualVideoPlayer : MonoBehaviour
 
     private Material glMaterial;
     private Material runtimeMaterial;
+    private AudioSource voiceSource;
+    private AudioSource seSource;
     private AudioSource bgmSource1;
     private AudioSource bgmSource2;
     private AudioSource currentBgmSource;
@@ -58,12 +61,19 @@ public class DualVideoPlayer : MonoBehaviour
 
     private void Start()
     {
-        if (audioSourceA != null) { playerA.audioOutputMode = VideoAudioOutputMode.AudioSource; playerA.EnableAudioTrack(0, true); playerA.SetTargetAudioSource(0, audioSourceA); }
-        if (audioSourceB != null) { playerB.audioOutputMode = VideoAudioOutputMode.AudioSource; playerB.EnableAudioTrack(0, true); playerB.SetTargetAudioSource(0, audioSourceB); }
+        ConfigureDirectAudio(playerA);
+        ConfigureDirectAudio(playerB);
 
         bgmSource1 = gameObject.AddComponent<AudioSource>(); bgmSource1.playOnAwake = false;
         bgmSource2 = gameObject.AddComponent<AudioSource>(); bgmSource2.playOnAwake = false;
         currentBgmSource = bgmSource1;
+        voiceSource = gameObject.AddComponent<AudioSource>();
+        seSource = gameObject.AddComponent<AudioSource>();
+        voiceSource.playOnAwake = false;
+        seSource.playOnAwake = false;
+        voiceSource.spatialBlend = 0f;
+        seSource.spatialBlend = 0f;
+        AssignBgmMixerGroup();
 
         Shader shader = Shader.Find("Unlit/Texture");
         if (shader == null) shader = Shader.Find("Sprites/Default");
@@ -75,6 +85,35 @@ public class DualVideoPlayer : MonoBehaviour
         BindTransitionTextures();
         SetTransitionFloat("_Transition", 1f);
         ApplyPlaybackSpeedToPlayers();
+    }
+
+    private void AssignBgmMixerGroup()
+    {
+        AudioMixerGroup bgmGroup = AudioOptions.FindGroupForOption("BGM");
+        AudioMixerGroup voiceGroup = AudioOptions.FindGroupForOption("Voice");
+        AudioMixerGroup seGroup = AudioOptions.FindGroupForOption("SE");
+        if (bgmGroup != null)
+        {
+            bgmSource1.outputAudioMixerGroup = bgmGroup;
+            bgmSource2.outputAudioMixerGroup = bgmGroup;
+        }
+        if (voiceGroup != null) voiceSource.outputAudioMixerGroup = voiceGroup;
+        if (seGroup != null) seSource.outputAudioMixerGroup = seGroup;
+    }
+
+    private void PlayCategoryClip(StoryAudioBus bus, AudioClip clip, bool loop)
+    {
+        if (clip == null || bus == StoryAudioBus.BGM) return;
+
+        AudioSource source = bus == StoryAudioBus.Voice ? voiceSource : seSource;
+        if (source == null) return;
+
+        AudioOptions.ApplyAll();
+        source.Stop();
+        source.clip = clip;
+        source.loop = loop;
+        source.volume = 1f;
+        source.Play();
     }
 
     private void OnDestroy()
@@ -220,6 +259,65 @@ public class DualVideoPlayer : MonoBehaviour
         // 4. 最後にRenderTextureを再アタッチ（これで新しい動画の比率として正しく計算される）
         player.targetTexture = targetRT;
         player.playbackSpeed = playbackSpeed;
+
+        if (clip != null && clip.audioTrackCount > 0)
+            player.controlledAudioTrackCount = clip.audioTrackCount;
+
+        ConfigureDirectAudio(player);
+    }
+
+    private IEnumerator PrepareVideoAudio(VideoPlayer player)
+    {
+        ConfigureDirectAudio(player);
+        player.Prepare();
+        while (!player.isPrepared)
+            yield return null;
+    }
+
+    private void PlayWithVolume(VideoPlayer player)
+    {
+        player.Play();
+        ApplyDirectVolumes(player);
+        StartCoroutine(ReapplyDirectVolume(player));
+    }
+
+    private void ConfigureDirectAudio(VideoPlayer player)
+    {
+        if (player == null) return;
+
+        // AudioSource に乗せると、この環境では動画の音声が出ない。
+        player.audioOutputMode = VideoAudioOutputMode.Direct;
+        if (player.controlledAudioTrackCount < 1)
+            player.controlledAudioTrackCount = 1;
+        player.EnableAudioTrack(0, true);
+        player.SetDirectAudioMute(0, false);
+    }
+
+    private void ApplyDirectVolumes(VideoPlayer player)
+    {
+        if (player == null) return;
+
+        ushort trackCount = player.audioTrackCount;
+        if (trackCount < 1)
+            trackCount = player.controlledAudioTrackCount > 0 ? player.controlledAudioTrackCount : (ushort)1;
+
+        float voice = 1f;
+        float se = 1f;
+        for (ushort track = 0; track < trackCount; track++)
+        {
+            player.EnableAudioTrack(track, true);
+            player.SetDirectAudioMute(track, false);
+            player.SetDirectAudioVolume(track, track == 0 ? voice : se);
+        }
+    }
+
+    private IEnumerator ReapplyDirectVolume(VideoPlayer player)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            yield return null;
+            ApplyDirectVolumes(player);
+        }
     }
 
     private void DrawImageToRenderTexture(Texture2D image, RenderTexture targetRT)
@@ -268,11 +366,8 @@ public class DualVideoPlayer : MonoBehaviour
         SetTransitionFloat("_GlobalAlpha", 0f);
 
         SetupVideoPlayer(playerA, texA, dummyClip, false);
-
-        playerA.Prepare();
-        while (!playerA.isPrepared) yield return null;
-
-        playerA.Play();
+        yield return PrepareVideoAudio(playerA);
+        PlayWithVolume(playerA);
 
         yield return new WaitForSeconds(0.5f);
         playerA.Stop();
@@ -287,13 +382,13 @@ public class DualVideoPlayer : MonoBehaviour
         IsTransitioning = false;
     }
 
-    public void PlayFirstMedia(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip bgmClip)
+    public void PlayFirstMedia(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip bgmClip, StoryAudioBus audioBus = StoryAudioBus.BGM)
     {
         if (IsTransitioning) return;
-        StartCoroutine(PlayFirstMediaRoutine(isStaticImage, clip, image, isLooping, bgmClip));
+        StartCoroutine(PlayFirstMediaRoutine(isStaticImage, clip, image, isLooping, bgmClip, audioBus));
     }
 
-    private IEnumerator PlayFirstMediaRoutine(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip bgmClip)
+    private IEnumerator PlayFirstMediaRoutine(bool isStaticImage, VideoClip clip, Texture2D image, bool isLooping, AudioClip bgmClip, StoryAudioBus audioBus)
     {
         IsTransitioning = true;
         isPlayerA_Active = true;
@@ -303,8 +398,22 @@ public class DualVideoPlayer : MonoBehaviour
         BindTransitionTextures();
         SetTransitionFloat("_Transition", 1f);
 
-        currentBgmSource.Stop();
-        if (bgmClip != null) { currentBgmSource.clip = bgmClip; currentBgmSource.loop = isLooping; currentBgmSource.volume = 1f; currentBgmSource.Play(); }
+        if (audioBus == StoryAudioBus.BGM)
+        {
+            currentBgmSource.Stop();
+            if (bgmClip != null)
+            {
+                AudioOptions.ApplyAll();
+                currentBgmSource.clip = bgmClip;
+                currentBgmSource.loop = isLooping;
+                currentBgmSource.volume = 1f;
+                currentBgmSource.Play();
+            }
+        }
+        else
+        {
+            PlayCategoryClip(audioBus, bgmClip, isLooping);
+        }
 
         if (isStaticImage)
         {
@@ -314,12 +423,9 @@ public class DualVideoPlayer : MonoBehaviour
         }
         else
         {
-            SetupVideoPlayer(playerA, texA, clip, isLooping); // ★魔法のメソッドを通す！
-
-            playerA.Prepare();
-            while (!playerA.isPrepared) yield return null;
-
-            playerA.Play();
+            SetupVideoPlayer(playerA, texA, clip, isLooping);
+            yield return PrepareVideoAudio(playerA);
+            PlayWithVolume(playerA);
             playerA.playbackSpeed = playbackSpeed;
             yield return WaitAndPreRender(playerA, texA);
         }
@@ -340,13 +446,13 @@ public class DualVideoPlayer : MonoBehaviour
         IsTransitioning = false;
     }
 
-    public void RequestPlayNextMedia(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm, float fadeDuration)
+    public void RequestPlayNextMedia(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm, float fadeDuration, StoryAudioBus audioBus = StoryAudioBus.BGM)
     {
         if (IsTransitioning) return;
-        StartCoroutine(TransitionRoutine(isStaticImage, nextClip, nextImage, isLooping, nextBgm, fadeDuration));
+        StartCoroutine(TransitionRoutine(isStaticImage, nextClip, nextImage, isLooping, nextBgm, fadeDuration, audioBus));
     }
 
-    private IEnumerator TransitionRoutine(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm, float fadeDuration)
+    private IEnumerator TransitionRoutine(bool isStaticImage, VideoClip nextClip, Texture2D nextImage, bool isLooping, AudioClip nextBgm, float fadeDuration, StoryAudioBus audioBus)
     {
         IsTransitioning = true;
         VideoPlayer activePlayer = isPlayerA_Active ? playerA : playerB;
@@ -355,17 +461,29 @@ public class DualVideoPlayer : MonoBehaviour
 
         activePlayer.isLooping = false;
         ClearRenderTexture(targetRT);
-        bool keepSameBgm = (currentBgmSource.isPlaying && nextBgm != null && currentBgmSource.clip == nextBgm);
+        bool playBgm = audioBus == StoryAudioBus.BGM;
+        bool keepSameBgm = playBgm && currentBgmSource.isPlaying && nextBgm != null && currentBgmSource.clip == nextBgm;
         AudioSource fadingOutBgmSource = null;
         AudioSource fadingInBgmSource = null;
 
-        if (keepSameBgm) { currentBgmSource.loop = isLooping; }
+        if (!playBgm)
+        {
+            PlayCategoryClip(audioBus, nextBgm, isLooping);
+        }
+        else if (keepSameBgm) { currentBgmSource.loop = isLooping; }
         else
         {
             fadingOutBgmSource = currentBgmSource;
             fadingInBgmSource = (currentBgmSource == bgmSource1) ? bgmSource2 : bgmSource1;
             fadingInBgmSource.Stop();
-            if (nextBgm != null) { fadingInBgmSource.clip = nextBgm; fadingInBgmSource.loop = isLooping; fadingInBgmSource.volume = 0f; fadingInBgmSource.Play(); }
+            if (nextBgm != null)
+            {
+                AudioOptions.ApplyAll();
+                fadingInBgmSource.clip = nextBgm;
+                fadingInBgmSource.loop = isLooping;
+                fadingInBgmSource.volume = 0f;
+                fadingInBgmSource.Play();
+            }
         }
 
         if (isStaticImage)
@@ -376,12 +494,9 @@ public class DualVideoPlayer : MonoBehaviour
         }
         else
         {
-            SetupVideoPlayer(nextPlayer, targetRT, nextClip, isLooping); // ★ここでも魔法のメソッドを通す！
-
-            nextPlayer.Prepare();
-            while (!nextPlayer.isPrepared) yield return null;
-
-            nextPlayer.Play();
+            SetupVideoPlayer(nextPlayer, targetRT, nextClip, isLooping);
+            yield return PrepareVideoAudio(nextPlayer);
+            PlayWithVolume(nextPlayer);
             nextPlayer.playbackSpeed = playbackSpeed;
             yield return WaitAndPreRender(nextPlayer, targetRT);
         }
@@ -396,13 +511,13 @@ public class DualVideoPlayer : MonoBehaviour
             float t = (fadeDuration > 0f) ? Mathf.Clamp01(time / fadeDuration) : 1f;
             SetTransitionFloat("_Transition", Mathf.Lerp(startValue, endValue, t));
             if (GetTransitionFloat("_GlobalAlpha") < 1.0f) SetTransitionFloat("_GlobalAlpha", Mathf.Lerp(0f, 1f, t));
-            if (!keepSameBgm) { if (nextBgm != null) fadingInBgmSource.volume = t; if (fadingOutBgmSource.isPlaying) fadingOutBgmSource.volume = 1f - t; }
+            if (playBgm && !keepSameBgm) { if (nextBgm != null) fadingInBgmSource.volume = t; if (fadingOutBgmSource.isPlaying) fadingOutBgmSource.volume = 1f - t; }
             yield return null;
         }
 
         SetTransitionFloat("_Transition", endValue);
         SetTransitionFloat("_GlobalAlpha", 1.0f);
-        if (!keepSameBgm) { if (nextBgm != null) fadingInBgmSource.volume = 1f; fadingOutBgmSource.Stop(); currentBgmSource = fadingInBgmSource; }
+        if (playBgm && !keepSameBgm) { if (nextBgm != null) fadingInBgmSource.volume = 1f; fadingOutBgmSource.Stop(); currentBgmSource = fadingInBgmSource; }
 
         activePlayer.Stop();
         isPlayerA_Active = !isPlayerA_Active;

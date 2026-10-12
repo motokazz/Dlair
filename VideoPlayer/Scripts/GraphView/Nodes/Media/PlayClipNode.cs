@@ -5,6 +5,9 @@ public class PlayClipNode : BaseNode, ISerializationCallbackReceiver
 {
     public VideoClip clip;
     public AudioClip audioClip;
+
+    [Tooltip("この Audio Clip をどの音量スライダーで鳴らすか")]
+    public StoryAudioBus audioBus = StoryAudioBus.BGM;
     public float crossFadeDuration = 1.0f;
     public bool isLooping;
 
@@ -18,7 +21,7 @@ public class PlayClipNode : BaseNode, ISerializationCallbackReceiver
     {
         if (clip != null)
         {
-            player.PlayVideo(clip, this, isLooping, portOutputTime, audioClip, crossFadeDuration);
+            player.PlayVideo(clip, this, isLooping, portOutputTime, audioClip, crossFadeDuration, audioBus);
         }
     }
 

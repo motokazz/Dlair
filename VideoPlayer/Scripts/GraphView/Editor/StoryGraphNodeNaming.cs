@@ -30,7 +30,7 @@ public static class StoryGraphNodeNaming
         Debug.Log($"【StoryGraph】Project ビュー用のノード名を {changed} 件付けました。");
     }
 
-    private const int MaxNameLength = 64;
+    private const int MaxNameLength = 80;
 
     public static bool TryApply(BaseNode node)
     {
@@ -67,14 +67,39 @@ public static class StoryGraphNodeNaming
     {
         if (node == null) return "Node";
 
+        string typeName = ShortTypeName(node);
+        string detail = Detail(node);
+        if (string.IsNullOrWhiteSpace(detail) || string.Equals(detail, typeName, StringComparison.OrdinalIgnoreCase))
+        {
+            return typeName;
+        }
+
+        if (detail.StartsWith(typeName, StringComparison.OrdinalIgnoreCase))
+        {
+            return Sanitize(detail, typeName);
+        }
+
+        return Sanitize(typeName + "  " + detail, typeName);
+    }
+
+    private static string Detail(BaseNode node)
+    {
         string raw;
         if (node is LabelNode labelNode)
         {
             raw = labelNode.GetDisplayTitle();
         }
+        else if (node is WaitNode waitNode)
+        {
+            raw = waitNode.GetDisplayTitle();
+        }
         else if (node is GotoNode gotoNode)
         {
             raw = gotoNode.GetDisplayTitle();
+        }
+        else if (node is VariableDeclareNode declareNode)
+        {
+            raw = declareNode.GetDisplayTitle();
         }
         else if (node is VariableOperationNode variableNode)
         {
@@ -104,6 +129,10 @@ public static class StoryGraphNodeNaming
         {
             raw = textNode.GetDisplayTitle();
         }
+        else if (node is VariableTextNode variableTextNode)
+        {
+            raw = variableTextNode.GetDisplayTitle();
+        }
         else if (node is SpawnPrefabNode spawnNode)
         {
             raw = spawnNode.GetDisplayTitle();
@@ -128,10 +157,10 @@ public static class StoryGraphNodeNaming
         }
         else
         {
-            raw = ShortTypeName(node);
+            raw = "";
         }
 
-        return Sanitize(raw, ShortTypeName(node));
+        return raw;
     }
 
     private static string ChoiceLabel(ChoiceNode node)

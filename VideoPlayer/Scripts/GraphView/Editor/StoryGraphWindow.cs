@@ -507,11 +507,6 @@ public class StoryGraphWindow : EditorWindow
             currentGraph.nodes.Clear();
             foreach (var nodeUI in uiNodes)
             {
-                if (nodeUI.data != null)
-                {
-                    StoryGraphNodeNaming.TryApply(nodeUI.data);
-                }
-
                 if (nodeUI.data != null && writePositions && nodeUI.TryGetLayoutPosition(out Vector2 livePos))
                 {
                     nodeUI.data.position = livePos;
@@ -533,6 +528,14 @@ public class StoryGraphWindow : EditorWindow
 
                 currentGraph.nodes.Add(nodeUI.data);
                 EditorUtility.SetDirty(nodeUI.data);
+            }
+
+            foreach (var nodeUI in uiNodes)
+            {
+                if (nodeUI.data != null)
+                {
+                    StoryGraphNodeNaming.TryApply(nodeUI.data);
+                }
             }
 
             currentGraph.links.Clear();

@@ -1,5 +1,9 @@
 using UnityEngine;
 
+/// <summary>
+/// 変数へ代入・加減乗除する。右辺は数値か、別の変数。
+/// 変数名はデータベースか変数宣言ノードから選ぶ。
+/// </summary>
 public class VariableOperationNode : BaseNode
 {
     public string variableName = "A";                                      // 演算対象の変数名

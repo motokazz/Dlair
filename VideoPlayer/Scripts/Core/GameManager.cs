@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 public enum VariableOperation
@@ -186,6 +187,41 @@ public static class GameManager
         return defaultValue;
     }
 
+    /// <summary>
+    /// 実行時点の変数値を表示用の文字列にする。未登録のキーは false。
+    /// </summary>
+    public static bool TryGetDisplayText(string key, out string text)
+    {
+        text = "";
+        if (string.IsNullOrEmpty(key)) return false;
+
+        if (stringParams.TryGetValue(key, out string stringValue))
+        {
+            text = stringValue ?? "";
+            return true;
+        }
+
+        if (boolParams.TryGetValue(key, out bool boolValue))
+        {
+            text = boolValue ? "On" : "Off";
+            return true;
+        }
+
+        if (floatParams.TryGetValue(key, out float floatValue))
+        {
+            text = floatValue.ToString("0.########", CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        if (intParams.TryGetValue(key, out int intValue))
+        {
+            text = intValue.ToString(CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        return false;
+    }
+
     public static void SetString(string key, string value)
     {
         if (string.IsNullOrEmpty(key)) return;
@@ -225,17 +261,27 @@ public static class GameManager
     {
         if (data == null) return;
         ResetAll();
+        MergeSaveData(data);
+        Debug.Log("【GameManager】セーブデータを復元しました。");
+    }
+
+    // 既にある値は残し、セーブにあるキーだけ上書きする
+    public static void MergeSaveData(SaveData data)
+    {
+        if (data == null) return;
 
         if (data.intEntries != null)
-            foreach (var e in data.intEntries) intParams[e.key] = e.value;
+            foreach (var e in data.intEntries)
+                if (!string.IsNullOrEmpty(e.key)) intParams[e.key] = e.value;
         if (data.boolEntries != null)
-            foreach (var e in data.boolEntries) boolParams[e.key] = e.value;
+            foreach (var e in data.boolEntries)
+                if (!string.IsNullOrEmpty(e.key)) boolParams[e.key] = e.value;
         if (data.floatEntries != null)
-            foreach (var e in data.floatEntries) floatParams[e.key] = e.value;
+            foreach (var e in data.floatEntries)
+                if (!string.IsNullOrEmpty(e.key)) floatParams[e.key] = e.value;
         if (data.stringEntries != null)
-            foreach (var e in data.stringEntries) stringParams[e.key] = e.value;
-
-        Debug.Log("【GameManager】セーブデータを復元しました。");
+            foreach (var e in data.stringEntries)
+                if (!string.IsNullOrEmpty(e.key)) stringParams[e.key] = e.value;
     }
 
     // JSON文字列として取得（セーブファイル作成用）
@@ -250,27 +296,6 @@ public static class GameManager
         if (string.IsNullOrEmpty(json)) return;
         SaveData data = JsonUtility.FromJson<SaveData>(json);
         ImportSaveData(data);
-    }
-
-    // PlayerPrefsに保存
-    public static void SaveToPlayerPrefs(string saveSlotKey = "Story_SaveData_Slot0")
-    {
-        string json = ToJson(false);
-        PlayerPrefs.SetString(saveSlotKey, json);
-        PlayerPrefs.Save();
-        Debug.Log($"【GameManager】PlayerPrefsに保存しました ({saveSlotKey})");
-    }
-
-    // PlayerPrefsからロード
-    public static bool LoadFromPlayerPrefs(string saveSlotKey = "Story_SaveData_Slot0")
-    {
-        if (PlayerPrefs.HasKey(saveSlotKey))
-        {
-            string json = PlayerPrefs.GetString(saveSlotKey);
-            LoadFromJson(json);
-            return true;
-        }
-        return false;
     }
     #endregion
 

@@ -11,6 +11,10 @@ public class ConditionBranchEntry
     public float threshold = 0f;
 }
 
+/// <summary>
+/// 変数と複数の設定値を比べ、該当する分岐へ進む。
+/// 変数名はデータベースか変数宣言ノードから選ぶ。
+/// </summary>
 [MovedFrom(true, null, null, "ThresholdBranchNode")]
 public class ConditionBranchNode : BaseNode
 {

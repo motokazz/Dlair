@@ -59,17 +59,42 @@ public class PrefabPool : MonoBehaviour
 
         if (spawned == null)
         {
-            spawned = Instantiate(prefab, parent);
+            spawned = parent != null ? Instantiate(prefab, parent, false) : Instantiate(prefab);
             BindOrigin(spawned, prefab);
+            AlignSpawnedUi(spawned, parent);
             spawned.SetActive(true);
             return spawned;
         }
 
         BindOrigin(spawned, prefab);
         resting.Remove(spawned);
-        spawned.transform.SetParent(parent, false);
+        if (parent != null) spawned.transform.SetParent(parent, false);
+        AlignSpawnedUi(spawned, parent);
         spawned.SetActive(true);
         return spawned;
+    }
+
+    public static void AlignSpawnedUi(GameObject instance, Transform parent)
+    {
+        if (instance == null || parent is not RectTransform) return;
+
+        if (instance.transform is not RectTransform)
+        {
+            Debug.LogWarning($"【UI生成】{instance.name} の RectTransform が失われていたため、付け直しました。");
+            instance.AddComponent<RectTransform>();
+        }
+
+        // localPosition を代入するとアンカーごと動いて、ギズモが映像から外れる。
+        // Z だけ anchoredPosition3D で戻し、画面上の位置は維持する。
+        RectTransform[] rects = instance.GetComponentsInChildren<RectTransform>(true);
+        for (int i = 0; i < rects.Length; i++)
+        {
+            RectTransform rect = rects[i];
+            Vector3 anchored = rect.anchoredPosition3D;
+            if (Mathf.Abs(anchored.z) < 0.001f) continue;
+            anchored.z = 0f;
+            rect.anchoredPosition3D = anchored;
+        }
     }
 
     private void ReleaseInternal(GameObject instance)

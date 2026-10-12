@@ -4,8 +4,19 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
+/// <summary>
+/// Project ウィンドウで選択している StoryGraph を複製する。
+/// SubGraph / Goto などの StoryGraph 参照は、今回複製するグラフ同士だけ複製先へつなぐ。
+/// 選択していない StoryGraph へリンクをたどって複製対象には含めない。
+/// </summary>
 public static class StoryGraphCloneUtility
 {
+    public const string Summary =
+        "複製対象は、Project ウィンドウで選択している StoryGraph です。指定した複製元も対象に含めます。\n" +
+        "SubGraph や Goto のリンクは、今回複製する StoryGraph 同士だけを複製先へつなぎます。\n" +
+        "選択していない StoryGraph はリンクをたどって複製せず、そこへのリンクはそのまま残します。\n" +
+        "動画・画像などのメディアアセット自体は共有したままです。";
+
     public class Result
     {
         public StoryGraph rootCopy;
@@ -13,11 +24,48 @@ public static class StoryGraphCloneUtility
         public readonly List<string> warnings = new List<string>();
     }
 
+    /// <summary>
+    /// 複製する StoryGraph を返す。root と、Project で選択中のグラフだけを集める。
+    /// リンク先の未選択グラフは展開しない。root は先頭に置く。
+    /// </summary>
     public static List<StoryGraph> CollectRelatedGraphs(StoryGraph root)
     {
         List<StoryGraph> collected = new List<StoryGraph>();
-        CollectRelatedGraphs(root, new HashSet<StoryGraph>(), collected);
+        HashSet<StoryGraph> seen = new HashSet<StoryGraph>();
+        if (root != null && seen.Add(root))
+        {
+            collected.Add(root);
+        }
+
+        List<StoryGraph> selected = CollectProjectSelectedGraphs();
+        for (int i = 0; i < selected.Count; i++)
+        {
+            StoryGraph graph = selected[i];
+            if (graph == null || !seen.Add(graph)) continue;
+            collected.Add(graph);
+        }
+
         return collected;
+    }
+
+    /// <summary>
+    /// Project ウィンドウで選択中の StoryGraph を返す。フォルダ配下やリンク先は展開しない。
+    /// </summary>
+    private static List<StoryGraph> CollectProjectSelectedGraphs()
+    {
+        List<StoryGraph> graphs = new List<StoryGraph>();
+        StoryGraph[] selected = Selection.GetFiltered<StoryGraph>(SelectionMode.Assets);
+        if (selected == null || selected.Length == 0) return graphs;
+
+        HashSet<StoryGraph> seen = new HashSet<StoryGraph>();
+        for (int i = 0; i < selected.Length; i++)
+        {
+            StoryGraph graph = selected[i];
+            if (graph == null || !seen.Add(graph)) continue;
+            graphs.Add(graph);
+        }
+
+        return graphs;
     }
 
     public static Result DuplicateTree(StoryGraph source, string destinationFolder, string nameSuffix)
@@ -40,6 +88,8 @@ public static class StoryGraphCloneUtility
             throw new InvalidOperationException("複製対象のグラフが見つかりません。");
         }
 
+        StoryGraph root = originals.Contains(source) ? source : originals[0];
+
         string suffix = nameSuffix ?? "";
         Dictionary<StoryGraph, string> destPaths = new Dictionary<StoryGraph, string>();
         HashSet<string> reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -58,7 +108,7 @@ public static class StoryGraphCloneUtility
             destPaths[original] = destPath;
         }
 
-        if (!destPaths.ContainsKey(source))
+        if (!destPaths.ContainsKey(root))
         {
             throw new InvalidOperationException("複製元グラフの出力パスを作れませんでした。");
         }
@@ -112,7 +162,7 @@ public static class StoryGraphCloneUtility
                 EditorUtility.SetDirty(copy);
             }
 
-            result.rootCopy = originalToCopy[source];
+            result.rootCopy = originalToCopy[root];
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
         }
@@ -134,48 +184,6 @@ public static class StoryGraphCloneUtility
         }
 
         return result;
-    }
-
-    private static void CollectRelatedGraphs(StoryGraph current, HashSet<StoryGraph> visited, List<StoryGraph> collected)
-    {
-        if (current == null || !visited.Add(current)) return;
-
-        collected.Add(current);
-        if (current.nodes == null) return;
-
-        for (int i = 0; i < current.nodes.Count; i++)
-        {
-            foreach (StoryGraph referenced in EnumerateReferencedGraphs(current.nodes[i]))
-            {
-                CollectRelatedGraphs(referenced, visited, collected);
-            }
-        }
-    }
-
-    private static IEnumerable<StoryGraph> EnumerateReferencedGraphs(BaseNode node)
-    {
-        if (node == null) yield break;
-
-        if (node is SubGraphNode subGraphNode && subGraphNode.subGraph != null)
-        {
-            yield return subGraphNode.subGraph;
-        }
-
-        if (node is GotoNode gotoNode && gotoNode.targetGraph != null)
-        {
-            yield return gotoNode.targetGraph;
-        }
-
-        using (SerializedObject serialized = new SerializedObject(node))
-        {
-            SerializedProperty iterator = serialized.GetIterator();
-            while (iterator.Next(true))
-            {
-                if (iterator.propertyType != SerializedPropertyType.ObjectReference) continue;
-                if (iterator.objectReferenceValue is not StoryGraph referenced || referenced == null) continue;
-                yield return referenced;
-            }
-        }
     }
 
     private static Dictionary<string, string> AssignNewGuids(IEnumerable<StoryGraph> copies, Result result)

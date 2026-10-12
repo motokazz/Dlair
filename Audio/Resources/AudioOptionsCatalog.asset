@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d19105ad083fa348800508cbe562a30, type: 3}
+  m_Name: AudioOptionsCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::AudioOptionsCatalog
+  mixer: {fileID: 24100000, guid: 1dc97638a6854b740bfb32d4eb1c1e60, type: 2}
+  options:
+  - id: Voice
+    label: Voice
+    kind: 0
+    mixerGroup: Voice
+    exposedParameter: 
+    defaultVolume: 1
+    authoredDb: 0
+  - id: SE
+    label: SE
+    kind: 0
+    mixerGroup: SE
+    exposedParameter: 
+    defaultVolume: 1
+    authoredDb: -20.782825
+  - id: BGM
+    label: BGM
+    kind: 0
+    mixerGroup: BGM
+    exposedParameter: 
+    defaultVolume: 1
+    authoredDb: -17.551157

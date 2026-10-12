@@ -5,9 +5,8 @@ using UnityEngine;
 
 public class StoryGraphAssetReplaceWindow : EditorWindow
 {
-    [SerializeField] private StoryGraph sourceGraph;
+    [SerializeField] private List<StoryGraph> targetGraphs = new List<StoryGraph>();
     [SerializeField] private DefaultAsset replacementFolder;
-    [SerializeField] private bool includeRelatedGraphs = true;
     [SerializeField] private bool includeSubfolders = true;
     [SerializeField] private StoryGraphAssetReplaceUtility.MatchMode matchMode =
         StoryGraphAssetReplaceUtility.MatchMode.ExactOrPartial;
@@ -21,14 +20,14 @@ public class StoryGraphAssetReplaceWindow : EditorWindow
     [MenuItem("Assets/Story Graph/アセットを差し替え...", true)]
     private static bool ValidateOpenFromSelection()
     {
-        return Selection.activeObject is StoryGraph;
+        return StoryGraphAssetReplaceUtility.CollectSelectedGraphs().Count > 0;
     }
 
     [MenuItem("Assets/Story Graph/アセットを差し替え...")]
     private static void OpenFromSelection()
     {
         StoryGraphAssetReplaceWindow window = GetWindow<StoryGraphAssetReplaceWindow>("アセット差し替え");
-        window.sourceGraph = Selection.activeObject as StoryGraph;
+        window.SetTargetsFromSelection();
         window.RefreshPreview();
         window.Show();
         window.Focus();
@@ -38,11 +37,7 @@ public class StoryGraphAssetReplaceWindow : EditorWindow
     private static void Open()
     {
         StoryGraphAssetReplaceWindow window = GetWindow<StoryGraphAssetReplaceWindow>("アセット差し替え");
-        if (window.sourceGraph == null && Selection.activeObject is StoryGraph selected)
-        {
-            window.sourceGraph = selected;
-        }
-
+        window.SetTargetsFromSelection();
         window.RefreshPreview();
         window.Show();
         window.Focus();
@@ -50,22 +45,25 @@ public class StoryGraphAssetReplaceWindow : EditorWindow
 
     private void OnEnable()
     {
+        if (targetGraphs == null) targetGraphs = new List<StoryGraph>();
+        SetTargetsFromSelection();
+        RefreshPreview();
+    }
+
+    private void OnSelectionChange()
+    {
+        if (!CaptureSelectedGraphs()) return;
         RefreshPreview();
     }
 
     private void OnGUI()
     {
         EditorGUILayout.Space(6);
-        EditorGUILayout.HelpBox(
-            "指定した StoryGraph 内の Prefab / Image / VideoClip / AudioClip などを、" +
-            "指定フォルダ内の同名または部分一致アセットに差し替えます。\n" +
-            "型が合うものだけが対象です。実行前にプレビューで確認できます。",
-            MessageType.Info);
+        EditorGUILayout.HelpBox(StoryGraphAssetReplaceUtility.Summary, MessageType.Info);
 
         EditorGUI.BeginChangeCheck();
-        sourceGraph = (StoryGraph)EditorGUILayout.ObjectField("対象 Graph", sourceGraph, typeof(StoryGraph), false);
+        DrawSelectedGraphs();
         DrawFolderField();
-        includeRelatedGraphs = EditorGUILayout.Toggle("関連グラフも含む", includeRelatedGraphs);
         includeSubfolders = EditorGUILayout.Toggle("サブフォルダも含む", includeSubfolders);
         int modeIndex = matchMode == StoryGraphAssetReplaceUtility.MatchMode.ExactOnly ? 0 : 1;
         modeIndex = EditorGUILayout.Popup("一致条件", modeIndex, new[] { "完全一致のみ", "完全一致 + 部分一致" });
@@ -166,7 +164,7 @@ public class StoryGraphAssetReplaceWindow : EditorWindow
         replacementScroll = EditorGUILayout.BeginScrollView(replacementScroll, GUILayout.MinHeight(180));
         if (replaceCount == 0)
         {
-            EditorGUILayout.LabelField("Graph とフォルダを指定すると、差し替え一覧が出ます。");
+            EditorGUILayout.LabelField("StoryGraph を選択し、フォルダを指定すると、差し替え一覧が出ます。");
         }
         else
         {
@@ -244,20 +242,46 @@ public class StoryGraphAssetReplaceWindow : EditorWindow
         }
     }
 
-    private void RefreshPreview()
+    private void SetTargetsFromSelection()
     {
-        string folderPath = replacementFolder != null ? AssetDatabase.GetAssetPath(replacementFolder) : null;
-        if (sourceGraph == null || string.IsNullOrEmpty(folderPath) || !AssetDatabase.IsValidFolder(folderPath))
+        targetGraphs = StoryGraphAssetReplaceUtility.CollectSelectedGraphs();
+    }
+
+    private bool CaptureSelectedGraphs()
+    {
+        List<StoryGraph> selected = StoryGraphAssetReplaceUtility.CollectSelectedGraphs();
+        if (selected.Count == 0) return false;
+        targetGraphs = selected;
+        return true;
+    }
+
+    private void DrawSelectedGraphs()
+    {
+        int count = targetGraphs != null ? targetGraphs.Count : 0;
+        EditorGUILayout.LabelField($"対象 StoryGraph ({count})", EditorStyles.boldLabel);
+        if (count == 0)
         {
-            preview = new StoryGraphAssetReplaceUtility.Preview();
-            Repaint();
+            EditorGUILayout.HelpBox(
+                "Project ウィンドウで差し替える StoryGraph を選択してください。",
+                MessageType.Warning);
             return;
         }
 
+        using (new EditorGUI.DisabledScope(true))
+        {
+            for (int i = 0; i < targetGraphs.Count; i++)
+            {
+                EditorGUILayout.ObjectField(targetGraphs[i], typeof(StoryGraph), false);
+            }
+        }
+    }
+
+    private void RefreshPreview()
+    {
+        string folderPath = replacementFolder != null ? AssetDatabase.GetAssetPath(replacementFolder) : null;
         preview = StoryGraphAssetReplaceUtility.BuildPreview(
-            sourceGraph,
+            targetGraphs,
             folderPath,
-            includeRelatedGraphs,
             includeSubfolders,
             matchMode);
         Repaint();

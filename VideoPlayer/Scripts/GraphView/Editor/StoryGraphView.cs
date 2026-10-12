@@ -58,6 +58,7 @@ public class StoryGraphView : GraphView
 
             menuEvent.menu.AppendAction("Create/Flow/Start Node", _ => CreateNodeUI<StartNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Flow/Redirect Node", _ => CreateNodeUI<RedirectNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Wait Node", _ => CreateNodeUI<WaitNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Flow/Label Node (行先)", _ =>
             {
                 CreateNodeUI<LabelNode>(graphPos, node => node.labelName = GetNextLabelName());
@@ -70,6 +71,7 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Media/Play Image Node", _ => CreateNodeUI<PlayImageNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Media/Playback Speed Node", _ => CreateNodeUI<PlaybackSpeedNode>(graphPos));
 
+            menuEvent.menu.AppendAction("Create/Variable/Variable Declare Node", _ => CreateNodeUI<VariableDeclareNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Bool Operation Node", _ => CreateNodeUI<BoolOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
@@ -78,6 +80,7 @@ public class StoryGraphView : GraphView
 
             menuEvent.menu.AppendAction("Create/UI/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
             menuEvent.menu.AppendAction("Create/UI/Text Node", _ => CreateNodeUI<TextNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/UI/Variable Text Node", _ => CreateNodeUI<VariableTextNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Spawn/Prefab Node", _ => CreateNodeUI<SpawnPrefabNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Memo", _ => CreateStickyNote(graphPos));
             menuEvent.menu.AppendSeparator();
