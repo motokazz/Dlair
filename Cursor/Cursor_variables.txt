@@ -1,0 +1,26 @@
+目的: Variable関連機能
+
+済:
+- Goto が置かれている StoryGraph 内の Label を行先に選べる
+- Variable 系ノードはドロップダウンで既存変数を選ぶ。直接入力は廃止
+- 選択肢は StoryVariableDatabase と変数宣言ノード
+- 変数宣言ノードは複数の変数を同時に宣言できる
+- 仕様変更後も、ノードに入っていた変数名は残る
+- 対象スクリプトに Summary を付けた
+- 変数選択に検索窓を付けた。仕様は Goto の行先選択と同じ
+
+未:
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Nodes/
+
+決めたこと:
+- Variable系のノードはドロップダウンで既存の変数から選ぶ。現在の変数を直接入力できる方式は廃止
+- 変数はStoryVariableDatabaseに設定されているものと、変数宣言用のノードを新規で作成し、それをリスト化してそこから選ぶ
+- 変数設定用のノードは複数同時に宣言できるようにする
+- 仕様変更のあったノードの変数は維持できるように改修してほしい
+- スクリプトにはSummeryをつける
+
+触らないこと:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/以外の場所にあるファイル
+

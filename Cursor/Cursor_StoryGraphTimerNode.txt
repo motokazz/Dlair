@@ -1,0 +1,18 @@
+目的: 指定された時間を経過するまでNextに進まないようにするノード
+
+済:
+
+未:
+-指定された時間を経過するまでNextに進まないようにするノード
+
+
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryGraphAssetReplaceUtility.cs
+
+決めたこと:
+- 入力は既存の Jump ボタンのまま。新しいボタンは作らない
+- 最大2段。3段目は不要
+
+触らないこと:
+- 移動速度、アニメーション

@@ -1,0 +1,21 @@
+目的: StoryVariableDatabaseの利便性を上げる
+
+済:
+- Summaryを明記する
+- CSVからStoryVariableDatabaseを作るツールを追加
+    - StoryVariableDatabaseUtility.cs
+    - StoryVariableDatabaseWindow.cs
+- 既存アセットを指定したときは変数一覧を CSV で置き換える。未指定なら指定フォルダに新規作成する
+
+未:
+
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryVariableDatabaseUtility.cs
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryVariableDatabaseWindow.cs
+
+決めたこと:
+- 対象スクリプトに Summary を付ける
+- CSVからStoryVariableDatabaseを作る
+
+触らないこと:

@@ -1,12 +1,18 @@
 ﻿using UnityEngine;
 using UnityEngine.Video;
 
+/// <summary>
+/// ギャラリー用のメディア一覧。動画・静止画と、解放状態やクロスフェードの設定を持つ。
+/// </summary>
 [CreateAssetMenu(fileName = "NewMediaPlaylist", menuName = "VideoPlayer/Media Playlist (Gallery Only)")]
 public class MediaPlaylist : ScriptableObject
 {
     [Header("Default Settings")]
     public float defaultCrossfadeDuration = 1.0f;
 
+    /// <summary>
+    /// プレイリストの1件。タイトル、メディア本体、解放キー、クロスフェードを持つ。
+    /// </summary>
     [System.Serializable]
     public class MediaData
     {

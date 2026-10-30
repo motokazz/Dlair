@@ -1,0 +1,31 @@
+目的: 指定されたLabelにジャンプする
+
+済:
+- 指定されたLabelにジャンプする
+- Gotoが配置されているStoryGraph内のLabelも指定できるようにする
+- 行先選択に検索窓を残す
+- 検索窓の入力を記憶し、次回行先選択時に入った状態にする
+- リストの文字色を白にする
+- 行の高さは固定。件数に合わせて行間を詰めない
+- 12件を超えたら、一覧の右に白いつまみのスクロールバーを出す
+
+未:
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Nodes/Flow/GotoNode.cs
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/GotoDestinationPopup.cs
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryGraphWindow.cs
+
+決めたこと:
+- Gotoが置かれているStoryGraph内のLabelも行先に選べる
+- 検索窓は残す。標準ドロップダウンには戻さない
+- 検索文字は EditorPrefs に残し、次に開いたときも入っている
+- フォントサイズは変えない。文字サイズの上書きや拡大縮小はしない
+- 行間の自動調整はしない。行高は固定
+- リストと検索の文字色は白
+- スクロールは Unity の ScrollView に頼らず、一覧の右に自前のバーを出す
+
+触らないこと:
+- フォントサイズ
+- 行間の自動調整
