@@ -1,0 +1,22 @@
+目的: ゲームを終了するノード
+済:
+- Summary とノードのヘルプを付けた
+- ノード全体と設定項目の折りたたみ・展開を保存する
+- 到達するとアプリケーションを終了するノードを作った
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/ExitGameNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphView.cs
+
+
+決めたこと:
+- Summaryを明記する
+- ノードのヘルプ
+- ノードの折り畳み展開
+- ゲーム（アプリケーション）を終了するノードの作成
+
+触らないこと:
+- Assets/Dlair/StoryGraph以外の場所にあるスクリプト

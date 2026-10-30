@@ -1,0 +1,21 @@
+目的: StoryGraphの変数用ツール
+
+済:
+- Summaryを明記する
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/内にツール新規作成
+    - StoryGraphVariableUtility.cs
+    - StoryGraphVariableWindow.cs
+
+未:
+
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryGraphVariableUtility.cs
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryGraphVariableWindow.cs
+
+
+決めたこと:
+- StoryGraph内の指定変数名を変更するツール。クローンツールで変更出来ない変数名を処理する用途。
+
+触らないこと:
+- ツールは独立したものとして作成。それ以外の部分はいじらない

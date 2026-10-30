@@ -1,0 +1,22 @@
+目的: 変数の値を見てButtonをLockする
+
+済:
+- 実行中の値（GameManager）を見て Lock する。未初期化のあいだだけ宣言時の初期値を使う。
+- 変数は割り当てた StoryVariableDatabase のプルダウンから選ぶ。
+- 対象スクリプトに Summary を付けた。
+- UI_change_image_with_flash を透過・ZTest Always・ZWrite Off にして、UI で絵が出るようにした。
+- Lock 画像、Unlock 画像、マテリアルはこのコンポーネントに登録する。
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryVariableLockButton.cs
+- Assets/Dlair/StoryGraph/UI/ShaderGraph/UI_change_image_with_flash.shadergraph
+- Assets/RawData/Main/UI/prefabs/Char_Select.prefab
+
+決めたこと:
+- 対象スクリプトに Summary を付ける
+- StoryVariableDatabaseで宣言されている変数の現在の値を見てLock状態にする
+
+触らないこと:
+- 「触るファイル」以外のファイル

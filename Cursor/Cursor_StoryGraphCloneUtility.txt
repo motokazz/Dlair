@@ -1,0 +1,17 @@
+目的: StoryGraphのクローンを作成するツール
+
+済:
+-一通りの機能は入った
+- StoryGraphのリンクは、Projectビューで選択中のモノ同士のみリンクをつなぐ
+- Summaryを明記する
+
+未:
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryGraphCloneUtility.cs
+
+決めたこと:
+- StoryGraphのリンクは、Projectビューで選択中のモノ同氏のみリンクをつなぐ
+
+触らないこと:
+- 対象StoryGraphの選択とリンクをたどる処理以外の部分はいじらない

@@ -1,0 +1,30 @@
+目的: 動画再生用ノード
+
+済:
+- Summary とノードのヘルプを付けた
+- ノード全体と設定項目の折りたたみ・展開を保存する
+- Video Clip と Audio Clip のループを分けた
+- Video Clip が無くても Audio Clip を再生する。そのとき映像は変えない
+- Video Clip が無いときの出力タイミングは Audio Clip の長さを基準にする
+- 再生の実装のため DualVideoPlayer も変更した
+- Audio Clip のフェード秒数を、映像のクロスフェードとは別に設定した。BGM・Voice・SE すべてに効く
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph
+
+決めたこと:
+- Summaryを明記する
+- ノードのヘルプ
+- ノードの折り畳み展開
+- VideoClipのループ設定と、AudioClipのループ設定を個別に設定できるようにしたい。
+- VideoCilpが無くても・AudioClip再生出来るようにしたい
+- 出力タイミングの設定はVideoCilpが無いときはAudioClipを考慮する
+- AudioClipもフェード設定したい
+- 動画やImageのアルファチャンネルも出力したい
+
+
+触らないこと:
+- Assets/Dlair/StoryGraph以外の場所にあるスクリプト
+

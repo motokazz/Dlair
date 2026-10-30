@@ -6,14 +6,24 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 using TMPro;
 
+/// <summary>
+/// ギャラリーの解放状態。解放済みメディアの ID を保存する。
+/// </summary>
 [System.Serializable]
 public class GallerySaveData
 {
     public List<string> unlockedIds = new List<string>();
 }
 
+/// <summary>
+/// プレイリストのメディアを選び、DualVideoPlayer で再生する。
+/// 解放状態を保存し、ギャラリーのボタン表示と自動進行を行う。
+/// </summary>
 public class PlaylistVideoPlayer : MonoBehaviour
 {
+    /// <summary>
+    /// 再生の進め方。手動選択か、終了後に次の解放済みメディアへ進むか。
+    /// </summary>
     public enum PlaybackMode { Manual, GalleryAuto }
 
     [Header("Player Reference")]
@@ -108,6 +118,9 @@ public class PlaylistVideoPlayer : MonoBehaviour
         catch { }
     }
 
+    /// <summary>
+    /// 指定インデックスのメディアが再生できるか。初期解放、またはセーブ済み ID に含まれるとき true。
+    /// </summary>
     public bool IsUnlocked(int index)
     {
         if (index < 0 || index >= playlistAsset.items.Length) return false;
@@ -117,6 +130,9 @@ public class PlaylistVideoPlayer : MonoBehaviour
         return saveData.unlockedIds.Contains(id);
     }
 
+    /// <summary>
+    /// 指定インデックスのメディアを解放し、セーブしてボタン表示を更新する。
+    /// </summary>
     public void UnlockMedia(int index)
     {
         if (index < 0 || index >= playlistAsset.items.Length) return;
@@ -131,6 +147,9 @@ public class PlaylistVideoPlayer : MonoBehaviour
         RefreshButtons();
     }
 
+    /// <summary>
+    /// 追加解放をすべて消し、初期解放だけの状態に戻す。
+    /// </summary>
     public void ResetAllUnlocks()
     {
         saveData.unlockedIds.Clear();
@@ -163,6 +182,9 @@ public class PlaylistVideoPlayer : MonoBehaviour
         RefreshButtons();
     }
 
+    /// <summary>
+    /// 解放状態に合わせて、ボタンのタイトル・サムネイル・操作可否を更新する。
+    /// </summary>
     public void RefreshButtons()
     {
         for (int i = 0; i < playlistAsset.items.Length; i++)
@@ -192,6 +214,9 @@ public class PlaylistVideoPlayer : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// ギャラリーのボタンからメディアを選ぶ。遷移中なら、終了後に再生する。
+    /// </summary>
     public void OnVideoSelectButtonClicked(int index)
     {
         if (index < 0 || index >= playlistAsset.items.Length) return;
@@ -303,6 +328,9 @@ public class PlaylistVideoPlayer : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 次の解放済みメディアを再生する。末尾のあとは loopPlaylist に従う。
+    /// </summary>
     public void PlayNextInPlaylist()
     {
         int nextIndex = currentIndex;

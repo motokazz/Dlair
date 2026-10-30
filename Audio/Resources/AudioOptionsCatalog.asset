@@ -27,11 +27,11 @@ MonoBehaviour:
     mixerGroup: SE
     exposedParameter: 
     defaultVolume: 1
-    authoredDb: -20.782825
+    authoredDb: 0
   - id: BGM
     label: BGM
     kind: 0
     mixerGroup: BGM
     exposedParameter: 
     defaultVolume: 1
-    authoredDb: -17.551157
+    authoredDb: 0

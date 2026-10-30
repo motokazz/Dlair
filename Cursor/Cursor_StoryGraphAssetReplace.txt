@@ -1,0 +1,17 @@
+目的: アセットの差し替えツール
+
+済:
+-一通りの機能は入った
+- StoryGraphのリンクは追わず、Projectビューで選択中のモノだけに処理を行う
+- Summaryを明記する
+
+未:
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Editor/StoryGraphAssetReplaceUtility.cs
+
+決めたこと:
+- StoryGraphのリンクは追わず、Projectビューで選択中のモノだけに処理を行いたい
+
+触らないこと:
+- 対象StoryGraphの選択とリンクをたどる処理以外の部分はいじらない
