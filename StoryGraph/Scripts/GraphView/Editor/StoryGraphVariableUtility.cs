@@ -11,7 +11,7 @@ public static class StoryGraphVariableUtility
 {
     public const string Summary =
         "処理対象は、Project ウィンドウで選択している StoryGraph です。\n" +
-        "ノードに保存された変数名を、指定した名前へ変えます。対象は変数宣言の名前と、条件・演算・Bool・変数テキスト・条件分岐が参照する変数名です。\n" +
+        "ノードに保存された変数名を、指定した名前へ変えます。対象は変数宣言の名前と、条件・複数条件・演算・Bool・変数テキスト・条件分岐が参照する変数名です。\n" +
         "選択したグラフが参照している別の StoryGraph、StoryVariableDatabase、分岐ラベル、本文は対象外です。\n" +
         "複製ツールは変数名をそのまま写します。複製したグラフの変数名は、このツールで別名にできます。\n" +
         "実行前にプレビューで確認できます。";
@@ -353,7 +353,24 @@ public static class StoryGraphVariableUtility
         using (SerializedObject serialized = new SerializedObject(node))
         {
             SerializedProperty variableName = serialized.FindProperty("variableName");
-            AddSite(sites, graph, node, variableName, false);
+            if (variableName != null && variableName.propertyPath == "variableName")
+            {
+                AddSite(sites, graph, node, variableName, false);
+            }
+
+            if (node is ConditionMultiNode)
+            {
+                SerializedProperty conditions = serialized.FindProperty("conditions");
+                if (conditions != null && conditions.isArray)
+                {
+                    for (int i = 0; i < conditions.arraySize; i++)
+                    {
+                        SerializedProperty element = conditions.GetArrayElementAtIndex(i);
+                        if (element == null) continue;
+                        AddSite(sites, graph, node, element.FindPropertyRelative("variableName"), false);
+                    }
+                }
+            }
 
             if (node is not VariableDeclareNode) return;
 

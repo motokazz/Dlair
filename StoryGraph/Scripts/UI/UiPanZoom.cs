@@ -2,8 +2,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 /// <summary>
 /// パンの制限。Cover は枠を覆う側へ寄せ、Contain は中身を枠の中に収める。
@@ -15,13 +19,36 @@ public enum UiPanLimitMode
 }
 
 /// <summary>
-/// UI をドラッグでパンし、ホイールでズームする。長押しでボタンとパンを分ける。
+/// パンに使うマウスボタン。タッチのドラッグには使わない。
+/// </summary>
+public enum UiPanMouseButton
+{
+    [InspectorName("左")]
+    Left,
+    [InspectorName("右")]
+    Right,
+    [InspectorName("中")]
+    Middle
+}
+
+/// <summary>
+/// UI をドラッグでパンし、ホイールとピンチでズームする。長押しでボタンとパンを分ける。
+/// 説明は UiPanZoom.Summary。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(RectTransform))]
 [AddComponentMenu("UI/Pan Zoom")]
 public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IScrollHandler, IPointerClickHandler
 {
+    public const string Summary =
+        "ドラッグで対象をパンし、ホイールとピンチでズームします。\n" +
+        "対象が空なら、このオブジェクト自身を動かします。複数指定すると、同じ操作でまとめて動きます。\n" +
+        "パンに使うマウスボタンは、左・右・中から選べます。初期値は左です。タッチのドラッグは、この設定に関係なくパンします。\n" +
+        "ボタンとトグルの上では、押し続けたときだけパンします。それより前に離すと、そのボタンが動作します。スライダーとスクロールバーではパンしません。\n" +
+        "ホイールは、スクロールビューなど別のホイール処理の上ではズームしません。\n" +
+        "パンできる範囲は、Cover（枠を覆う）と Contain（枠の中に収める）です。基準、範囲、遊びを指定できます。\n" +
+        "有効化したとき、またはパンに設定したマウスボタンのダブルクリックで、位置と倍率を初期状態へ戻します。";
+
     [Header("対象")]
     [Tooltip("動かしたい RectTransform。空ならこのオブジェクト自身")]
     public List<RectTransform> targets = new List<RectTransform>();
@@ -31,6 +58,8 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     [Header("操作")]
     public bool enablePan = true;
     public bool enableZoom = true;
+    [Tooltip("パンに使うマウスボタン。タッチのドラッグには影響しない")]
+    public UiPanMouseButton panButton = UiPanMouseButton.Left;
     [Tooltip("ボタン上でこの秒数押し続けるとパンを開始する。それより前に離すとボタンが動作する")]
     [Min(0.05f)] public float panHoldDuration = 0.4f;
 
@@ -41,7 +70,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     public float zoomStep = 0.1f;
     [Tooltip("有効化時に位置と倍率を初期状態へ戻す")]
     public bool resetOnEnable = true;
-    [Tooltip("ダブルクリックで初期状態へ戻す")]
+    [Tooltip("パンに設定したマウスボタンのダブルクリックで初期状態へ戻す")]
     public bool resetOnDoubleClick = true;
 
     [Header("パン制限")]
@@ -138,7 +167,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     {
         if (eventData == null) return;
         eventData.useDragThreshold = true;
-        if (IsHoldToPanTarget(eventData.pointerPressRaycast.gameObject))
+        if (IsPanDrag(eventData) && IsHoldToPanTarget(eventData.pointerPressRaycast.gameObject))
         {
             eventData.pointerDrag = null;
         }
@@ -147,7 +176,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (holdPending || manualPan) return;
-        dragging = enablePan && eventData != null && eventData.button == PointerEventData.InputButton.Left && !IsHoldToPanTarget(PressedObject(eventData));
+        dragging = enablePan && eventData != null && IsPanDrag(eventData) && !IsHoldToPanTarget(PressedObject(eventData));
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -175,6 +204,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
     public void OnPointerClick(PointerEventData eventData)
     {
         if (!resetOnDoubleClick || eventData == null || eventData.clickCount < 2) return;
+        if (eventData.button != PanPointerButton()) return;
         if (IsHoldToPanTarget(PressedObject(eventData))) return;
         ResetView();
     }
@@ -634,6 +664,27 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         return null;
     }
 
+    private bool IsPanDrag(PointerEventData eventData)
+    {
+        if (eventData is ExtendedPointerEventData extended && extended.pointerType == UIPointerType.Touch)
+            return true;
+
+        return eventData.button == PanPointerButton();
+    }
+
+    private PointerEventData.InputButton PanPointerButton()
+    {
+        switch (panButton)
+        {
+            case UiPanMouseButton.Right:
+                return PointerEventData.InputButton.Right;
+            case UiPanMouseButton.Middle:
+                return PointerEventData.InputButton.Middle;
+            default:
+                return PointerEventData.InputButton.Left;
+        }
+    }
+
     private static GameObject PressedObject(PointerEventData eventData)
     {
         if (eventData == null) return null;
@@ -694,7 +745,7 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         return raycastResults[0].gameObject;
     }
 
-    private static bool TryReadPrimaryPointer(out Vector2 position, out bool pressed, out bool pressedThisFrame)
+    private bool TryReadPrimaryPointer(out Vector2 position, out bool pressed, out bool pressedThisFrame)
     {
         Touchscreen touchscreen = Touchscreen.current;
         if (touchscreen != null)
@@ -713,8 +764,22 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         if (mouse != null)
         {
             position = mouse.position.ReadValue();
-            pressed = mouse.leftButton.isPressed;
-            pressedThisFrame = mouse.leftButton.wasPressedThisFrame;
+            switch (panButton)
+            {
+                case UiPanMouseButton.Right:
+                    pressed = mouse.rightButton.isPressed;
+                    pressedThisFrame = mouse.rightButton.wasPressedThisFrame;
+                    break;
+                case UiPanMouseButton.Middle:
+                    pressed = mouse.middleButton.isPressed;
+                    pressedThisFrame = mouse.middleButton.wasPressedThisFrame;
+                    break;
+                default:
+                    pressed = mouse.leftButton.isPressed;
+                    pressedThisFrame = mouse.leftButton.wasPressedThisFrame;
+                    break;
+            }
+
             return true;
         }
 
@@ -758,3 +823,19 @@ public class UiPanZoom : MonoBehaviour, IPointerDownHandler, IInitializePotentia
         return canvas.worldCamera;
     }
 }
+
+#if UNITY_EDITOR
+/// <summary>
+/// UiPanZoom のインスペクタ。説明を出す。
+/// </summary>
+[CanEditMultipleObjects]
+[CustomEditor(typeof(UiPanZoom))]
+public class UiPanZoomEditor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        EditorGUILayout.HelpBox(UiPanZoom.Summary, MessageType.Info);
+        DrawDefaultInspector();
+    }
+}
+#endif

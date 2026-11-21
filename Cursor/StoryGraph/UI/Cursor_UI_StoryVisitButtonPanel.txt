@@ -1,0 +1,44 @@
+目的: Button_rum/Panel の子ボタンを、再生記録のリストから一括で揃える。段階の働きは 0・1・2 で固定する
+
+済:
+- StoryVisitButtonPanel を追加した。Panel に再生記録のリストと共通設定を持つ
+- 1段階目はリストの再生記録。追加の段階、画像、マテリアル、アニメーション、反転は共通
+- リストに合わせて子ボタンを Spawn し、一致するものは残す
+- Unlock のときだけ押せ、押すとその行の Label へ Goto する
+- Char_Select の Button_rum/Panel に、今の20件を登録し、各ボタンの OnClick に Goto を付けた
+- 段階の働きを固定した。0段目は今の Lock のまま。1段目以降はカーソルオーバーでバルーン。2段目の Goto でもバルーンは残す
+- メッセージ文はリストの行に書く。バルーンの見た目と位置は共通
+- 子ボタンの生成はゲーム実行中だけにした。プレハブ資産へは追加しない
+- バルーンの地は実行時の白い画像にした。Unity の内蔵 UISprite は読まない
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryVisitButtonPanel.cs
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryVisitButtonPanel.cs.meta
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryVariableLockButton.cs
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryGotoButton.cs
+- Assets/RawData/Main/UI/prefabs/Char_Select.prefab
+
+決めたこと:
+- コンポーネントは Panel に付ける。リストの1件がボタン1つ
+- 1段階目は再生記録だけ。行ごとに StoryGraph と Label とメッセージを持つ
+- StoryGraph か Label が空の行はボタンにしない
+- 追加の段階、Lock 画像、Unlock 画像、途中の画像、マテリアル、アニメーション、スケール、1段階目の反転は共通
+- 直接の子で StoryVariableLockButton があるものを生成対象にする。それ以外の子は残す
+- 件数と内容がリストと一致するボタンは残す。足りなければ Spawn し、多ければ末尾から消す。違う内容はそのボタンへ書き直す
+- 新しく Spawn したボタンの名前は、Label の表示名にする
+- 押したときの行先は、その行の Label。別の行先は持たない
+- 段階の働きは固定。0段目（満たした数が 0）は今の Lock のまま。メッセージも Goto も無い
+- 1段目（満たした数が 1 以上）は、カーソルを重ねるとその行の文章をバルーンで出す。文章が空なら出さない
+- 2段目は今までどおり、全部 Unlock のときだけ押せ、押すと Goto する。バルーンは残す
+- バルーンはボタンの上に1つだけ出す。フォント、色、余白、位置のずれ、最大幅は共通
+- バルーンの地は実行時に作る白い画像。Unity の内蔵スプライトは使わない
+- Goto のクリック登録は StoryVisitButtonPanel が行う。StoryGotoButton 単体は、これまでどおり自動では登録しない
+- ボタンの生成はゲーム実行中だけ行う。生成した子はプレハブ資産に書き戻さない
+
+触らないこと:
+- Button_rum/Panel 以外のボタン
+- StoryVariableLockButton の Lock 判定とアニメーションの意味
+- StoryVariableLockButton を持たない子
+- 既存の .meta

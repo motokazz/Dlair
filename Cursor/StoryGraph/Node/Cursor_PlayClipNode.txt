@@ -8,6 +8,8 @@
 - Video Clip が無いときの出力タイミングは Audio Clip の長さを基準にする
 - 再生の実装のため DualVideoPlayer も変更した
 - Audio Clip のフェード秒数を、映像のクロスフェードとは別に設定した。BGM・Voice・SE すべてに効く
+- 透過のある動画と Image のアルファを画面に出す。画像の描画と、表示用シェーダーを変えた
+- Audio Clip をグラフへドロップすると Play Clip ノードを作る。Video Clip と同じ
 
 未:
 
@@ -23,7 +25,7 @@
 - 出力タイミングの設定はVideoCilpが無いときはAudioClipを考慮する
 - AudioClipもフェード設定したい
 - 動画やImageのアルファチャンネルも出力したい
-
+- VideoClipと同様にAudioClipのドラッグアンドドロップでノード作成
 
 触らないこと:
 - Assets/Dlair/StoryGraph以外の場所にあるスクリプト

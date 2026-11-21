@@ -4,7 +4,22 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// ボタンの上でカーソルを変える。UI 描画と、OS カーソルの置き換えを選べる。
+/// 属性名と、そのカーソル画像。スプライトがあればテクスチャより優先する。
+/// </summary>
+[System.Serializable]
+public class UiCursorAttributeEntry
+{
+    [Tooltip("ボタンのカーソル属性と同じ名前")]
+    public string attributeName;
+    [Tooltip("スプライトがあればこちらを優先します。両方空ならボタンオーバーの画像です")]
+    public Sprite sprite;
+    public Texture2D texture;
+    public Vector2 hotspot = new Vector2(8f, 4f);
+}
+
+/// <summary>
+/// ボタンの上でカーソルを変える。属性があればその画像、無ければ共通のボタンオーバー画像。
+/// UI 描画と、OS カーソルの置き換えを選べる。
 /// </summary>
 public class UiCursorController : MonoBehaviour
 {
@@ -22,6 +37,10 @@ public class UiCursorController : MonoBehaviour
     public Color hoverTint = Color.white;
     [Tooltip("ソフトウェア表示のサイズ（px）。ハードウェアカーソルには影響しません")]
     public float hoverDisplaySize = 48f;
+
+    [Header("属性")]
+    [Tooltip("属性名ごとのカーソル画像。ボタンの UiCursorAttribute と同じ名前を書きます")]
+    public List<UiCursorAttributeEntry> attributeCursors = new List<UiCursorAttributeEntry>();
 
     [Header("判定")]
     [Tooltip("Button 以外の Selectable（Toggle など）でも変える")]
@@ -41,7 +60,10 @@ public class UiCursorController : MonoBehaviour
     private Sprite hoverTextureSprite;
     private Texture2D defaultHardwareTexture;
     private Texture2D hoverHardwareTexture;
+    private readonly Dictionary<UiCursorAttributeEntry, Sprite> attributeTextureSprites = new Dictionary<UiCursorAttributeEntry, Sprite>();
+    private readonly Dictionary<UiCursorAttributeEntry, Texture2D> attributeHardwareTextures = new Dictionary<UiCursorAttributeEntry, Texture2D>();
     private bool hovering;
+    private string hoveringAttribute;
     private Canvas canvas;
     private RectTransform canvasRect;
     private Camera eventCamera;
@@ -83,11 +105,13 @@ public class UiCursorController : MonoBehaviour
 
     private void LateUpdate()
     {
-        bool nextHover = IsPointerOverClickable();
-        if (nextHover != hovering)
+        bool nextHover = TryGetPointerTarget(out string nextAttribute);
+        if (!nextHover) nextAttribute = null;
+        if (nextHover != hovering || nextAttribute != hoveringAttribute)
         {
             hovering = nextHover;
-            ApplyCursor(hovering);
+            hoveringAttribute = nextAttribute;
+            ApplyCursor(hovering, hoveringAttribute);
         }
         else if (useSoftwareCursor && (hovering || HasDefaultGraphic()))
         {
@@ -95,8 +119,9 @@ public class UiCursorController : MonoBehaviour
         }
     }
 
-    private bool IsPointerOverClickable()
+    private bool TryGetPointerTarget(out string attributeName)
     {
+        attributeName = null;
         EventSystem eventSystem = EventSystem.current;
         if (eventSystem == null) return false;
 
@@ -117,13 +142,20 @@ public class UiCursorController : MonoBehaviour
             Selectable selectable = hit.GetComponentInParent<Selectable>();
             if (selectable == null || !selectable.IsActive() || !selectable.IsInteractable()) continue;
             if (!includeOtherSelectables && selectable is not Button) continue;
+
+            UiCursorAttribute attribute = selectable.GetComponent<UiCursorAttribute>();
+            if (attribute != null && !string.IsNullOrEmpty(attribute.attributeName))
+            {
+                attributeName = attribute.attributeName;
+            }
+
             return true;
         }
 
         return false;
     }
 
-    private void ApplyCursor(bool hover)
+    private void ApplyCursor(bool hover, string attributeName = null)
     {
         if (useSoftwareCursor)
         {
@@ -144,7 +176,7 @@ public class UiCursorController : MonoBehaviour
                 softwareRect.gameObject.SetActive(showSoftware);
                 if (showSoftware)
                 {
-                    ApplySoftwareVisual(hover);
+                    ApplySoftwareVisual(hover, attributeName);
                     PositionSoftwareCursor();
                 }
             }
@@ -156,11 +188,15 @@ public class UiCursorController : MonoBehaviour
         Cursor.visible = true;
         if (hover)
         {
-            Cursor.SetCursor(GetHardwareTexture(true), GetHotspot(true), CursorMode.Auto);
+            ResolveHover(attributeName, out Sprite sourceSprite, out Texture2D sourceTexture, out Vector2 sourceHotspot, out UiCursorAttributeEntry entry);
+            Cursor.SetCursor(
+                GetHoverHardwareTexture(sourceSprite, sourceTexture, entry),
+                GetHotspot(true, sourceSprite, sourceTexture, sourceHotspot),
+                CursorMode.Auto);
         }
         else if (HasDefaultGraphic())
         {
-            Cursor.SetCursor(GetHardwareTexture(false), GetHotspot(false), CursorMode.Auto);
+            Cursor.SetCursor(GetDefaultHardwareTexture(), GetHotspot(false, defaultCursorSprite, defaultCursor, defaultHotspot), CursorMode.Auto);
         }
         else
         {
@@ -168,14 +204,61 @@ public class UiCursorController : MonoBehaviour
         }
     }
 
-    private void ApplySoftwareVisual(bool hover)
+    private void ApplySoftwareVisual(bool hover, string attributeName)
     {
-        Sprite sprite = GetSoftwareSprite(hover);
+        Sprite sourceSprite;
+        Texture2D sourceTexture;
+        Vector2 sourceHotspot;
+        Sprite sprite;
+        if (hover)
+        {
+            ResolveHover(attributeName, out sourceSprite, out sourceTexture, out sourceHotspot, out UiCursorAttributeEntry entry);
+            sprite = GetHoverSoftwareSprite(sourceSprite, sourceTexture, sourceHotspot, entry);
+        }
+        else
+        {
+            sourceSprite = defaultCursorSprite;
+            sourceTexture = defaultCursor;
+            sourceHotspot = defaultHotspot;
+            sprite = GetDefaultSoftwareSprite();
+        }
+
         softwareImage.sprite = sprite;
         softwareImage.preserveAspect = true;
         softwareImage.color = hover ? hoverTint : Color.white;
         softwareRect.sizeDelta = FitSize(sprite, hoverDisplaySize);
-        softwareRect.pivot = GetSoftwarePivot(hover, sprite);
+        softwareRect.pivot = GetSoftwarePivot(hover, sprite, sourceSprite, sourceTexture, sourceHotspot);
+    }
+
+    private void ResolveHover(string attributeName, out Sprite sprite, out Texture2D texture, out Vector2 hotspot, out UiCursorAttributeEntry entry)
+    {
+        entry = FindAttribute(attributeName);
+        if (entry != null && (entry.sprite != null || entry.texture != null))
+        {
+            sprite = entry.sprite;
+            texture = entry.texture;
+            hotspot = entry.hotspot;
+            return;
+        }
+
+        entry = null;
+        sprite = hoverCursorSprite;
+        texture = hoverCursor;
+        hotspot = hoverHotspot;
+    }
+
+    private UiCursorAttributeEntry FindAttribute(string attributeName)
+    {
+        if (string.IsNullOrEmpty(attributeName) || attributeCursors == null) return null;
+
+        for (int i = 0; i < attributeCursors.Count; i++)
+        {
+            UiCursorAttributeEntry entry = attributeCursors[i];
+            if (entry == null || string.IsNullOrEmpty(entry.attributeName)) continue;
+            if (entry.attributeName == attributeName) return entry;
+        }
+
+        return null;
     }
 
     private void EnsureCursorAssets()
@@ -206,38 +289,28 @@ public class UiCursorController : MonoBehaviour
         return defaultCursorSprite != null || defaultCursor != null;
     }
 
-    private Sprite GetSoftwareSprite(bool hover)
+    private Sprite GetHoverSoftwareSprite(Sprite sourceSprite, Texture2D sourceTexture, Vector2 sourceHotspot, UiCursorAttributeEntry entry)
     {
-        if (hover)
-        {
-            if (hoverCursorSprite != null) return hoverCursorSprite;
-            if (hoverTextureSprite != null) return hoverTextureSprite;
-            return builtInHoverSprite;
-        }
+        if (sourceSprite != null) return sourceSprite;
+        if (sourceTexture != null) return GetTextureSprite(sourceTexture, sourceHotspot, entry);
+        return builtInHoverSprite;
+    }
 
+    private Sprite GetDefaultSoftwareSprite()
+    {
         if (defaultCursorSprite != null) return defaultCursorSprite;
         return defaultTextureSprite;
     }
 
-    private Texture2D GetHardwareTexture(bool hover)
+    private Texture2D GetHoverHardwareTexture(Sprite sourceSprite, Texture2D sourceTexture, UiCursorAttributeEntry entry)
     {
-        if (hover)
-        {
-            if (hoverCursorSprite != null)
-            {
-                if (hoverHardwareTexture == null)
-                {
-                    hoverHardwareTexture = CreateTextureFromSprite(hoverCursorSprite);
-                    Own(hoverHardwareTexture);
-                }
+        if (sourceSprite != null) return GetSpriteHardwareTexture(sourceSprite, entry);
+        if (sourceTexture != null) return sourceTexture;
+        return builtInHover;
+    }
 
-                return hoverHardwareTexture;
-            }
-
-            if (hoverCursor != null) return hoverCursor;
-            return builtInHover;
-        }
-
+    private Texture2D GetDefaultHardwareTexture()
+    {
         if (defaultCursorSprite != null)
         {
             if (defaultHardwareTexture == null)
@@ -252,16 +325,60 @@ public class UiCursorController : MonoBehaviour
         return defaultCursor;
     }
 
-    private Vector2 GetHotspot(bool hover)
+    private Sprite GetTextureSprite(Texture2D sourceTexture, Vector2 sourceHotspot, UiCursorAttributeEntry entry)
     {
-        Sprite sprite = hover ? hoverCursorSprite : defaultCursorSprite;
-        Vector2 custom = hover ? hoverHotspot : defaultHotspot;
-        if (sprite != null && !overrideHotspot)
+        if (entry != null)
         {
-            return SpritePivotToCursorHotspot(sprite);
+            if (!attributeTextureSprites.TryGetValue(entry, out Sprite cached) || cached == null)
+            {
+                cached = CreateSprite(sourceTexture, sourceHotspot);
+                Own(cached);
+                attributeTextureSprites[entry] = cached;
+            }
+
+            return cached;
         }
 
-        if (hover && sprite == null && hoverCursor == null)
+        if (hoverTextureSprite == null)
+        {
+            hoverTextureSprite = CreateSprite(sourceTexture, sourceHotspot);
+            Own(hoverTextureSprite);
+        }
+
+        return hoverTextureSprite;
+    }
+
+    private Texture2D GetSpriteHardwareTexture(Sprite sourceSprite, UiCursorAttributeEntry entry)
+    {
+        if (entry != null)
+        {
+            if (!attributeHardwareTextures.TryGetValue(entry, out Texture2D cached) || cached == null)
+            {
+                cached = CreateTextureFromSprite(sourceSprite);
+                Own(cached);
+                attributeHardwareTextures[entry] = cached;
+            }
+
+            return cached;
+        }
+
+        if (hoverHardwareTexture == null)
+        {
+            hoverHardwareTexture = CreateTextureFromSprite(sourceSprite);
+            Own(hoverHardwareTexture);
+        }
+
+        return hoverHardwareTexture;
+    }
+
+    private Vector2 GetHotspot(bool hover, Sprite sourceSprite, Texture2D sourceTexture, Vector2 custom)
+    {
+        if (sourceSprite != null && !overrideHotspot)
+        {
+            return SpritePivotToCursorHotspot(sourceSprite);
+        }
+
+        if (hover && sourceSprite == null && sourceTexture == null)
         {
             return new Vector2(8f, 4f);
         }
@@ -269,17 +386,17 @@ public class UiCursorController : MonoBehaviour
         return custom;
     }
 
-    private Vector2 GetSoftwarePivot(bool hover, Sprite sprite)
+    private Vector2 GetSoftwarePivot(bool hover, Sprite sprite, Sprite sourceSprite, Texture2D sourceTexture, Vector2 sourceHotspot)
     {
         if (sprite == null) return new Vector2(0f, 1f);
-        if (!overrideHotspot && (hover ? hoverCursorSprite : defaultCursorSprite) != null)
+        if (!overrideHotspot && sourceSprite != null)
         {
             Rect rect = sprite.rect;
             if (rect.width <= 0f || rect.height <= 0f) return new Vector2(0f, 1f);
             return new Vector2(sprite.pivot.x / rect.width, sprite.pivot.y / rect.height);
         }
 
-        Vector2 hotspot = GetHotspot(hover);
+        Vector2 hotspot = GetHotspot(hover, sourceSprite, sourceTexture, sourceHotspot);
         float width = sprite.rect.width;
         float height = sprite.rect.height;
         if (width <= 0f || height <= 0f) return new Vector2(0f, 1f);
@@ -332,6 +449,7 @@ public class UiCursorController : MonoBehaviour
         Cursor.visible = true;
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
         hovering = false;
+        hoveringAttribute = null;
     }
 
     private void Own(Object asset)

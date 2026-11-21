@@ -93,7 +93,9 @@ public class DualVideoPlayer : MonoBehaviour
         currentSeSource = seSource1;
         AssignBgmMixerGroup();
 
-        Shader shader = Shader.Find("Unlit/Texture");
+        // Unlit/Texture はアルファを 1 にするため、透過は別のシェーダーで写す。
+        Shader shader = Shader.Find("Custom/VideoAlphaCopy");
+        if (shader == null) shader = Shader.Find("Hidden/BlitCopy");
         if (shader == null) shader = Shader.Find("Sprites/Default");
         if (shader != null) glMaterial = new Material(shader);
 
@@ -421,11 +423,14 @@ public class DualVideoPlayer : MonoBehaviour
         if (image == null || targetRT == null) return;
         RenderTexture previous = RenderTexture.active;
         RenderTexture.active = targetRT;
-        GL.Clear(true, true, Color.black);
+        GL.Clear(true, true, Color.clear);
 
         if (aspectMode == AspectMode.Stretch || glMaterial == null)
         {
-            Graphics.Blit(image, targetRT);
+            if (glMaterial != null)
+                Graphics.Blit(image, targetRT, glMaterial);
+            else
+                Graphics.Blit(image, targetRT);
             RenderTexture.active = previous;
             return;
         }

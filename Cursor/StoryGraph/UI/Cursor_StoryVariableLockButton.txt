@@ -1,0 +1,41 @@
+目的: 変数の値を見てButtonをLockする
+
+済:
+- 実行中の値（GameManager）を見て Lock する。未初期化のあいだだけ宣言時の初期値を使う。
+- 変数は割り当てた StoryVariableDatabase のプルダウンから選ぶ。
+- 対象スクリプトに Summary を付けた。
+- UI_change_image_with_flash を透過・ZTest Always・ZWrite Off にして、UI で絵が出るようにした。
+- Lock 画像、Unlock 画像、マテリアルはこのコンポーネントに登録する。
+- StoryGotoUnlocks.jsonの内容も選べるようにする
+- ゲームを実行してから、最初に表示されたときに一回だけアンロックアニメーションを行う
+- インスペクタを複数選択に対応した
+- Unlock 画像を、その Sprite の範囲で表示するようにした
+- 追加の段階を置けるようにした。1段階目は今の判定のまま。追加した段階は変数か再生記録で、すべて Unlock のときだけ Unlock する。追加が無いボタンは今まで通り。
+- 段階ごとに画像が変わるようにした。途中は追加の段階に登録した画像、全部揃ったら Unlock 画像。ボタンを押せるのは全部揃ったときだけ。
+
+未:
+
+
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryVariableLockButton.cs
+- Assets/Dlair/StoryGraph/UI/ShaderGraph/UI_change_image_with_flash.shadergraph
+- Assets/RawData/Main/UI/prefabs/Char_Select.prefab
+
+決めたこと:
+- 対象スクリプトに Summary を付ける
+- StoryVariableDatabaseで宣言されている変数の現在の値を見てLock状態にする
+- StoryGotoUnlocks.jsonの内容も選べるようにする
+- ゲームを実行してから、最初に表示されたときに一回だけアンロックアニメーションを行う
+- 再生記録は StoryGraph を割り当て、その Label 一覧から選ぶ。アセット名とラベル名の組が StoryGotoUnlocks.json にあるとき Unlock。
+- アンロックアニメーションは、実行後にそのボタンが最初に有効になって Unlock のときだけ再生する。再表示では今の状態をすぐ出す。
+- インスペクタは複数選択に対応する。値が違う項目は混在表示にし、変えた項目だけ選択中の全部に書く。
+- Unlock 画像は Lock 画像の UV ではなく、その Sprite 自身の範囲で表示する。
+- 1段階目は今の判定（再生記録か変数）。追加の段階も、それぞれ再生記録か変数を選ぶ。
+- すべての段階が Unlock のときだけボタンを押せる。途中の段階では押せない。追加が無ければ 1段階目だけで今まで通り。
+- キャラクターの再生記録に、全部揃ったことを表す変数を足すと、その変数も Unlock のときだけボタンを押せて StoryGoto できる。
+- 途中の段階の画像は、追加の段階に登録する。手前まで満たしたときはその画像、何も満たしていないときは Lock 画像、全部満たしたときは Unlock 画像。
+- 表示中に段階が進んだときは今の画像から次の画像へ切り替える。再表示ではその画像をすぐ出す。最初の表示で全部 Unlock のときだけ、Lock 画像から Unlock 画像へ一度アニメする。
+
+触らないこと:
+- 「触るファイル」以外のファイル

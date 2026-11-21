@@ -1,13 +1,21 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
 /// <summary>
-/// 進行と設定を JSON で出し入れする。マスターの初期値はそのまま使い、プレイヤーが変えた値だけを SaveData へ書く。
+/// 説明は GameSave.Summary。
 /// </summary>
 public static class GameSave
 {
+    public const string Summary =
+        "進行データは、指定した StoryVariableDatabase にある変数だけを story.json に書きます。\n" +
+        "StoryGraph の変数宣言ノードで作った変数は、実行中は使いますが保存しません。\n" +
+        "再生したラベルは、グラフのアセット名とラベル名の組で StoryGotoUnlocks.json に残します。";
+
     const string LegacyStoryPrefsKey = "Story_SaveData_Slot0";
 
+    static readonly HashSet<string> databaseKeys = new HashSet<string>();
     static StoryVariableDatabase storyDatabase;
     static bool booted;
     static bool suppressStorySave;
@@ -23,7 +31,8 @@ public static class GameSave
         booted = true;
         GameSettings.Load();
         LoadStoryFromDisk();
-        GameManager.OnVariableChanged += _ => SaveStory();
+        StoryVisitLog.Load();
+        GameManager.OnVariableChanged += SaveStory;
         Debug.Log($"【Save】セーブ先: {SaveDataPaths.Root}");
     }
 
@@ -32,8 +41,8 @@ public static class GameSave
         if (database == null)
             return;
 
-        storyDatabase = database;
-        GameManager.SaveData overlay = GameManager.ExportSaveData();
+        RememberDatabase(database);
+        GameManager.SaveData overlay = FilterToDatabase(GameManager.ExportSaveData());
         suppressStorySave = true;
         try
         {
@@ -44,26 +53,36 @@ public static class GameSave
         {
             suppressStorySave = false;
         }
+
+        SaveStory();
     }
 
-    public static void SaveStory()
+    public static void SaveStory(string changedKey = null)
     {
         if (suppressStorySave)
             return;
 
-        JsonSaveFile.Write(SaveDataPaths.StoryFile, GameManager.ToJson(true));
+        if (storyDatabase != null && changedKey != null && !databaseKeys.Contains(changedKey))
+            return;
+
+        GameManager.SaveData data = GameManager.ExportSaveData();
+        if (storyDatabase != null)
+            data = FilterToDatabase(data);
+
+        JsonSaveFile.Write(SaveDataPaths.StoryFile, JsonUtility.ToJson(data, true));
     }
 
     public static void ClearStory(StoryVariableDatabase database = null)
     {
         StoryVariableDatabase source = ResolveDatabase(database);
+        StoryVisitLog.Clear();
         suppressStorySave = true;
         try
         {
             JsonSaveFile.Delete(SaveDataPaths.StoryFile);
             if (source != null)
             {
-                storyDatabase = source;
+                RememberDatabase(source);
                 GameManager.InitializeFromDatabase(source);
             }
             else
@@ -89,6 +108,7 @@ public static class GameSave
 
     public static void DeleteAll(StoryVariableDatabase database = null)
     {
+        StoryVisitLog.Clear();
         suppressStorySave = true;
         try
         {
@@ -97,7 +117,7 @@ public static class GameSave
             StoryVariableDatabase source = ResolveDatabase(database);
             if (source != null)
             {
-                storyDatabase = source;
+                RememberDatabase(source);
                 GameManager.InitializeFromDatabase(source);
             }
             else
@@ -191,5 +211,43 @@ public static class GameSave
 
         StoryPlayer player = UnityEngine.Object.FindFirstObjectByType<StoryPlayer>();
         return player != null ? player.variableDatabase : null;
+    }
+
+    static void RememberDatabase(StoryVariableDatabase database)
+    {
+        storyDatabase = database;
+        databaseKeys.Clear();
+        if (database == null)
+            return;
+
+        List<string> keys = database.GetAllKeys();
+        for (int i = 0; i < keys.Count; i++)
+            databaseKeys.Add(keys[i]);
+    }
+
+    static GameManager.SaveData FilterToDatabase(GameManager.SaveData source)
+    {
+        var filtered = new GameManager.SaveData();
+        if (source == null)
+            return filtered;
+
+        Keep(source.intEntries, filtered.intEntries, entry => entry.key);
+        Keep(source.boolEntries, filtered.boolEntries, entry => entry.key);
+        Keep(source.floatEntries, filtered.floatEntries, entry => entry.key);
+        Keep(source.stringEntries, filtered.stringEntries, entry => entry.key);
+        return filtered;
+    }
+
+    static void Keep<T>(List<T> source, List<T> destination, Func<T, string> keyOf)
+    {
+        if (source == null)
+            return;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            string key = keyOf(source[i]);
+            if (!string.IsNullOrEmpty(key) && databaseKeys.Contains(key))
+                destination.Add(source[i]);
+        }
     }
 }

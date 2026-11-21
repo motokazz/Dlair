@@ -1,10 +1,15 @@
 using UnityEngine;
 
 /// <summary>
-/// プレハブをポインタ位置、またはワールド座標に出す。破棄はプレハブ側の AutoRelease が担当する。
+/// 説明は SpawnPrefabNode.Summary。
 /// </summary>
-public class SpawnPrefabNode : BaseNode
+public class SpawnPrefabNode : BaseNode, ISerializationCallbackReceiver
 {
+    public const string Summary =
+        "プレハブを、いまのポインタ位置、またはワールド座標に出します。破棄はプレハブ側の AutoRelease が担当します。\n" +
+        "永続化をオンにすると、Goto などのジャンプでも消えずに残ります。オフのときはジャンプで片づきます。\n" +
+        "タイトル右のボタンでノード全体、設定ボタンで項目だけ、折りたたみと展開ができます。";
+
     [Header("生成するプレハブ")]
     public GameObject prefab;
 
@@ -20,6 +25,26 @@ public class SpawnPrefabNode : BaseNode
 
     [Tooltip("ワールド生成時、カメラからこの距離の位置に出す")]
     public float worldDistance = 10f;
+
+    [Tooltip("オン: Goto などのジャンプ後も残す。オフ: ジャンプで片づける。AutoRelease はどちらでも破棄する。")]
+    public bool persist;
+
+    [Tooltip("オンでノード全体を展開、オフで折りたたみ。")]
+    public bool nodeExpanded = true;
+
+    [Tooltip("オンで設定項目を展開、オフで折りたたみ。")]
+    public bool settingsExpanded = true;
+
+    [SerializeField]
+    private int layoutVersion = 1;
+
+    /// <summary>
+    /// グラフ上の説明文。Summary と同じです。
+    /// </summary>
+    public string GetHelpText()
+    {
+        return Summary;
+    }
 
     public override void Execute(StoryPlayer player)
     {
@@ -43,9 +68,10 @@ public class SpawnPrefabNode : BaseNode
         }
 
         GameObject instance = PrefabPool.Spawn(prefab, parent);
-        if (instance != null)
+        if (instance != null && player != null)
         {
             player.RegisterSpawned(instance);
+            if (persist) player.ProtectSpawned(instance);
         }
 
         if (instance != null && spawnAtPointer)
@@ -115,5 +141,18 @@ public class SpawnPrefabNode : BaseNode
 #else
         return Vector2.zero;
 #endif
+    }
+
+    public void OnBeforeSerialize()
+    {
+    }
+
+    public void OnAfterDeserialize()
+    {
+        if (layoutVersion >= 1) return;
+
+        nodeExpanded = true;
+        settingsExpanded = true;
+        layoutVersion = 1;
     }
 }

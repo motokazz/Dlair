@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 移動先の名前。到達すると訪問済みにし、Next へ進む。
+/// 移動先の名前。到達すると再生中のグラフ名とラベル名を記録し、Next へ進む。
 /// </summary>
 public class LabelNode : BaseNode
 {
@@ -11,7 +11,7 @@ public class LabelNode : BaseNode
     public override void Execute(StoryPlayer player)
     {
         Debug.Log($"【Label】'{GetDisplayName()}'");
-        StoryGotoPanel.NotifyVisited(GetDisplayName());
+        StoryVisitLog.Record(player != null ? player.ActiveGraph : null, GetDisplayName());
         player.ContinueTo(this, "Next");
     }
 

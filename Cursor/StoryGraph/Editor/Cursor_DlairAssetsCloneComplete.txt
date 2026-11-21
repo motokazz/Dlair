@@ -1,0 +1,30 @@
+目的: Dlairの一連のデータの一括クローン
+
+済:
+- データベースフォルダの直下からコピー元とコピー先を選び、StoryGraph / Voices / UI / Videos を一括クローンするツールを追加した
+- StoryGraph は「_」後半をコピー先フォルダ名にして上書き複製し、ノード GUID と今回複製したグラフ同士の参照を複製ツールと同じ手順で振り直す
+- StoryGraph 以外は、コピー先に同じ名前が無いときだけコピーする
+- コピー先 StoryGraph でアセット再リンクと、コピー元フォルダ名を含む変数名の書き換えを行う
+- コピー元のアセットリンクがデータベースの外にある場合、アセット差し替えは行わない
+- 説明や確認メッセージが増えても、実行ボタンはウィンドウ下端に残す
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/DlairAssetsCloneUtility.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/DlairAssetsCloneWindow.cs
+
+決めたこと:
+- Summaryを明記する
+- StoryGraphのクローン時に行っている処理を一括して行う。ワークフローは以下の順番で処理。
+- データベースフォルダ選択・コピー元とコピー先を選択。コピー先にStoryGraph、Voices、UI、Videosフォルダが無い場合は作成
+- StoryGraphファイルの処理：StoryGraphCloneUtility.csで行っている処理、「_」区切りで後半部分をコピー先フォルダ名に書き換えたものを新しいファイルとしてコピー先/StoryGraphフォルダに複製する。名前が被っているものは上書きする。
+- StoryGraph以外のファイルの処理：コピー先フォルダの中に同じ名前の物が無ければコピーを作成。あれば何もしない。
+- コピー先StoryGraph内でStoryGraphAssetReplaceUtilityで行っている再リンク処理を行う
+- 変数名の中に、コピー元フォルダ名が部分一致するものがある時、その部分をコピー先フォルダ名に書き換える。
+- ツールの置き場所は、既存の StoryGraph エディタツールと同じ Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/
+- コピー元のアセットリンクがデータベースの外にある場合、アセット差し替えは行わない。
+- 実行ボタンはメッセージの外、ウィンドウ下端に固定する。
+
+触らないこと:
+- 触るファイル以外

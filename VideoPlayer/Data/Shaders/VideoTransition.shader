@@ -10,7 +10,7 @@ Shader "Custom/VideoTransitionUI"
         _RuleAmount ("Rule Amount (0=Fade, 1=Wipe)", Range(0, 1)) = 0
         _GlobalAlpha ("Global Alpha", Range(0, 1)) = 1
 
-        // --- UI（Image/Mask）で必須となるプロパティ ---
+        // UI?Image/Mask??????????
         _Color ("Tint", Color) = (1,1,1,1)
         _StencilComp ("Stencil Comparison", Float) = 8
         _Stencil ("Stencil ID", Float) = 0
@@ -30,7 +30,7 @@ Shader "Custom/VideoTransitionUI"
             "CanUseSpriteAtlas"="True"
         }
 
-        // --- UIマスク対応用のステンシル設定 ---
+        // UI??????????????
         Stencil
         {
             Ref [_Stencil]
@@ -44,7 +44,8 @@ Shader "Custom/VideoTransitionUI"
         Lighting Off
         ZWrite Off
         ZTest [unity_GUIZTestMode]
-        Blend SrcAlpha OneMinusSrcAlpha
+        // ?????????????????????SrcAlpha ????????????????
+        Blend One OneMinusSrcAlpha
         ColorMask [_ColorMask]
 
         Pass
@@ -57,14 +58,14 @@ Shader "Custom/VideoTransitionUI"
             struct appdata_t
             {
                 float4 vertex   : POSITION;
-                float4 color    : COLOR; // UIからのカラー情報を受け取る
+                float4 color    : COLOR;
                 float2 uv       : TEXCOORD0;
             };
 
             struct v2f
             {
                 float4 vertex   : SV_POSITION;
-                fixed4 color    : COLOR; // フラグメントシェーダーへ渡す
+                fixed4 color    : COLOR;
                 float2 uv       : TEXCOORD0;
             };
 
@@ -82,7 +83,7 @@ Shader "Custom/VideoTransitionUI"
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
-                o.color = v.color * _Color; // UIの頂点カラー（透過度含む）を適用
+                o.color = v.color * _Color;
                 return o;
             }
 
@@ -90,22 +91,20 @@ Shader "Custom/VideoTransitionUI"
             {
                 fixed4 colA = tex2D(_MainTex, i.uv);
                 fixed4 colB = tex2D(_SubTex, i.uv);
-                
+
                 float fadeMask = 1.0 - saturate(_Transition);
                 float rule = tex2D(_RuleTex, i.uv).r;
                 float t = _Transition * (1.0 + _Smoothness * 2.0) - _Smoothness;
                 float ruleMask = smoothstep(t - _Smoothness, t + _Smoothness, rule);
                 float mask = lerp(fadeMask, ruleMask, saturate(_RuleAmount));
 
-                // 2つのテクスチャを遷移
+                colA.rgb *= colA.a;
+                colB.rgb *= colB.a;
                 fixed4 finalColor = lerp(colB, colA, mask);
-                
-                // UIコンポーネント（ImageやCanvasGroup）のアルファを乗算
-                finalColor *= i.color;
-                
-                // グローバルアルファを適用
-                finalColor.a *= _GlobalAlpha;
 
+                float extraAlpha = i.color.a * _GlobalAlpha;
+                finalColor.rgb *= i.color.rgb * extraAlpha;
+                finalColor.a *= extraAlpha;
                 return finalColor;
             }
             ENDCG

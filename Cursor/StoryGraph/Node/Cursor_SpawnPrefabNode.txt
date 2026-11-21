@@ -1,0 +1,22 @@
+目的: PrefabをSpawnする
+
+済:
+- Summaryを明記する
+- ノードのヘルプ
+- ノード全体と設定項目の折りたたみ・展開を保存する
+- 永続化をオンにすると、Goto などのジャンプ後も生成物を残す。オフのときはジャンプで片づく。AutoRelease はどちらでも破棄する
+
+未:
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Nodes/
+
+決めたこと:
+- Summaryを明記する
+- ノードのヘルプ
+- ノードの折り畳み展開
+- 永続化機能
+
+触らないこと:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/以外の場所にあるファイル
+

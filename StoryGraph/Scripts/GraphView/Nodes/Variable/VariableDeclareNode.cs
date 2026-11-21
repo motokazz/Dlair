@@ -22,7 +22,8 @@ public class VariableDeclaration
 /// <summary>
 /// 複数の変数をまとめて宣言する。
 /// StoryVariableDatabase の変数と合わせて、変数ノードの選択肢になる。
-/// 再生時は、まだ値が無い変数にだけ初期値を入れる。セーブ済みの値は上書きしない。
+/// 再生時は、まだ値が無い変数にだけ初期値を入れる。
+/// ここで宣言した変数はセーブしない。StoryVariableDatabase にある同名変数のセーブ値は上書きしない。
 /// </summary>
 public class VariableDeclareNode : BaseNode
 {
@@ -87,7 +88,7 @@ public class VariableDeclareNode : BaseNode
     /// </summary>
     public string GetHelpText()
     {
-        return "変数をまとめて宣言します。ここでの名前と Variable Database の変数が、他の変数ノードの一覧になります。再生時は、まだ値が無い変数にだけ初期値を入れます。";
+        return "変数をまとめて宣言します。ここでの名前と Variable Database の変数が、他の変数ノードの一覧になります。再生時は、まだ値が無い変数にだけ初期値を入れます。ここで宣言した変数はセーブしません。";
     }
 
     /// <summary>

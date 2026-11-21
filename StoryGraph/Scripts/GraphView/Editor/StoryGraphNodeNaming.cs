@@ -116,6 +116,10 @@ public static class StoryGraphNodeNaming
         {
             raw = conditionNode.GetDisplayTitle();
         }
+        else if (node is ConditionMultiNode conditionMultiNode)
+        {
+            raw = conditionMultiNode.GetDisplayTitle();
+        }
         else if (node is ConditionBranchNode conditionBranchNode)
         {
             raw = conditionBranchNode.GetDisplayTitle();

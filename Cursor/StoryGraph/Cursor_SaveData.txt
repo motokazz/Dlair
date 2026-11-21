@@ -1,0 +1,17 @@
+目的: セーブデータ管理
+済:
+- story.json には、指定した StoryVariableDatabase の変数だけを書く
+- StoryGraph の変数宣言ノードで作った変数は保存しない
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/UI/ChoiceNode.cs
+
+
+決めたこと:
+- Summaryを明記する
+- 指定したVariableDatabase以外の変数は保存しない
+
+触らないこと:
+- Assets/Dlair/以外の場所にあるスクリプト

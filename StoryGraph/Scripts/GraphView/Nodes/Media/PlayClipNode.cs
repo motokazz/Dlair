@@ -10,7 +10,8 @@ public class PlayClipNode : BaseNode, ISerializationCallbackReceiver
         "Video Clip と Audio Clip を再生します。Video Clip が無くても Audio Clip だけ再生でき、そのときは画面の映像を変えません。\n" +
         "動画のループと音声のループは別々です。映像のクロスフェードと音声のフェードも別々です。\n" +
         "Next の秒数は、Video Clip があるときはその長さ、無いときは Audio Clip の長さが基準です。0 は開始と同時、負の値か長さ以上は終端です。\n" +
-        "タイトル右のボタンでノード全体、設定ボタンで項目だけ、折りたたみと展開ができます。";
+        "タイトル右のボタンでノード全体、設定ボタンで項目だけ、折りたたみと展開ができます。\n" +
+        "透過のある Video Clip は、アルファを画面に出します。透けた部分には、その後ろの表示が見えます。";
 
     public const string OutputTimingTooltip =
         "0: 開始と同時に Next へ。負の値、または基準の長さ以上: 終端。基準は Video Clip の長さ。Video Clip が無いときは Audio Clip の長さ。";
