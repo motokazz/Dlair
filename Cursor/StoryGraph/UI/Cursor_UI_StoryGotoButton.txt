@@ -1,0 +1,28 @@
+目的: 指定StoryGraphのラベルに即座にGotoするボタンコンポーネント
+済:
+- StoryGotoButton を追加した
+- 割り当てた StoryGraph の Label をプルダウンから選び、ボタンを押した時点でそこへ移動する
+- 行先は Label の識別子で保持する
+- StoryPlayer が空のときはシーン内の StoryPlayer を使う
+- Summary をインスペクタに出した
+- StoryPlayer が空のときは、シーン内から見つけて設定するようにした
+- インスペクタを複数選択に対応した
+- クリックには自動で登録せず、Button の OnClick など Event から Goto を呼ぶようにした
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/UI/StoryGotoButton.cs
+
+決めたこと:
+- Summaryを明記する
+- UIのボタンに、StoryGraph内の指定ラベルにGotoする機能を付与する
+- 行先は割り当てた StoryGraph にある Label から選ぶ
+- 押した時点で移動する。呼び出しは Button の OnClick など Event で指定し、クリックには自動で登録しない
+- Unlock と併用するときは、Lock がボタンを押せなくし、押した Event に Goto を登録する
+- StoryPlayer未設定時はシーンの中から探して自動的に設定
+- MultiObjectEditing対応
+
+
+触らないこと:
+- Assets/Dlair/StoryGraph以外の場所にあるスクリプト

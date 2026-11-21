@@ -2,6 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// 静止画と任意の音声を、指定秒数表示する。
+/// 画像にアルファがあるときは、その透過も画面に出します。
 /// </summary>
 public class PlayImageNode : BaseNode
 {

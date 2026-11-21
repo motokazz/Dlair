@@ -53,6 +53,14 @@ public class StoryGraph : ScriptableObject
         return null;
     }
 
+    /// <summary>
+    /// このグラフのラベルが再生済みか。グラフのアセット名とラベル名の組で StoryVisitLog を参照する。
+    /// </summary>
+    public bool IsLabelVisited(string labelName)
+    {
+        return StoryVisitLog.IsVisited(this, labelName);
+    }
+
     public LabelNode FindLabelByName(string labelName)
     {
         if (nodes == null || string.IsNullOrWhiteSpace(labelName)) return null;

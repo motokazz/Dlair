@@ -285,8 +285,8 @@ public class StoryGraphWindow : EditorWindow
         rootVisualElement.Clear();
         rootVisualElement.style.flexDirection = FlexDirection.Column;
         rootVisualElement.focusable = true;
-        rootVisualElement.UnregisterCallback<KeyDownEvent>(OnRootKeyDown);
-        rootVisualElement.RegisterCallback<KeyDownEvent>(OnRootKeyDown);
+        rootVisualElement.UnregisterCallback<KeyDownEvent>(OnRootKeyDown, TrickleDown.TrickleDown);
+        rootVisualElement.RegisterCallback<KeyDownEvent>(OnRootKeyDown, TrickleDown.TrickleDown);
 
         toolbarHost = new VisualElement { name = "toolbar-host" };
         toolbarHost.style.flexShrink = 0;
@@ -316,7 +316,29 @@ public class StoryGraphWindow : EditorWindow
         {
             NavigateBack();
             evt.StopPropagation();
+            return;
         }
+
+        if (evt.keyCode == KeyCode.G && evt.ctrlKey && !evt.altKey && !evt.shiftKey && !IsTextInput(evt.target as VisualElement))
+        {
+            if (graphView != null && graphView.TryGroupSelection())
+            {
+                evt.StopPropagation();
+            }
+        }
+    }
+
+    private static bool IsTextInput(VisualElement target)
+    {
+        VisualElement current = target;
+        while (current != null)
+        {
+            if (current is TextField) return true;
+            if (current.ClassListContains(TextField.textInputUssName)) return true;
+            current = current.parent;
+        }
+
+        return false;
     }
 
     private VisualElement BuildToolbar()
@@ -677,7 +699,7 @@ public class StoryGraphWindow : EditorWindow
 
                     if (outPort != null && inPort != null)
                     {
-                        Edge edge = outPort.ConnectTo(inPort);
+                        Edge edge = outPort.ConnectTo<StoryGraphEdge>(inPort);
                         graphView.AddElement(edge);
                     }
                 }

@@ -79,6 +79,7 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Variable/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Bool Operation Node", _ => CreateNodeUI<BoolOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Condition Multi Node", _ => CreateNodeUI<ConditionMultiNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Random Branch Node", _ => CreateNodeUI<RandomBranchNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Branch Node", _ => CreateNodeUI<ConditionBranchNode>(graphPos));
 
@@ -88,7 +89,7 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Spawn/Prefab Node", _ => CreateNodeUI<SpawnPrefabNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Memo", _ => CreateStickyNote(graphPos));
             menuEvent.menu.AppendSeparator();
-            menuEvent.menu.AppendAction("Group Selection", _ => GroupSelection(), _ => CanGroupSelection()
+            menuEvent.menu.AppendAction("Group Selection  Ctrl+G", _ => GroupSelection(), _ => CanGroupSelection()
                 ? DropdownMenuAction.Status.Normal
                 : DropdownMenuAction.Status.Disabled);
             menuEvent.menu.AppendAction("Ungroup", _ => UngroupSelection(), _ => CanUngroupSelection()
@@ -200,6 +201,7 @@ public class StoryGraphView : GraphView
         if (rect.width < 8f) rect.width = 220f;
         if (rect.height < 8f) rect.height = 140f;
         group.SetPosition(rect);
+        BindGroup(group);
         AddElement(group);
 
         if (data.nodeGuids != null && nodes != null)
@@ -223,6 +225,23 @@ public class StoryGraphView : GraphView
                 }
             }
         }
+
+        if (data.collapsed)
+        {
+            group.SetCollapsed(true, false);
+        }
+    }
+
+    private void BindGroup(StoryGraphGroup group)
+    {
+        group.Changed = () => NotifyAnnotationChanged(group.collapsed ? "グループを折りたたむ" : "グループを展開");
+    }
+
+    public bool TryGroupSelection()
+    {
+        if (!CanGroupSelection()) return false;
+        GroupSelection();
+        return true;
     }
 
     private void GroupSelection()
@@ -241,6 +260,7 @@ public class StoryGraphView : GraphView
         StoryGraphGroup group = new StoryGraphGroup();
         group.guid = Guid.NewGuid().ToString();
         group.title = "Group";
+        BindGroup(group);
         AddElement(group);
         foreach (GraphElement member in members)
         {
@@ -330,7 +350,8 @@ public class StoryGraphView : GraphView
         {
             guid = group.guid,
             title = group.title,
-            position = GetElementGraphRect(group)
+            position = GetElementGraphRect(group),
+            collapsed = group.collapsed
         };
 
         foreach (GraphElement contained in group.containedElements)
@@ -350,6 +371,12 @@ public class StoryGraphView : GraphView
 
     private Rect GetElementGraphRect(GraphElement element)
     {
+        if (element != null && element.GetContainingScope() is StoryGraphGroup group &&
+            group.TryGetStoredRect(element, out Rect stored))
+        {
+            return stored;
+        }
+
         Rect rect = element.GetPosition();
         if (element.GetFirstAncestorOfType<Scope>() == null)
         {
@@ -511,7 +538,7 @@ public class StoryGraphView : GraphView
         if (refs == null) return false;
         foreach (UnityEngine.Object obj in refs)
         {
-            if (obj is VideoClip || obj is Texture2D || obj is Sprite) return true;
+            if (obj is VideoClip || obj is AudioClip || obj is Texture2D || obj is Sprite) return true;
             if (obj is StoryGraph nested && !StoryGraph.WouldCreateCycle(window != null ? window.currentGraph : null, nested))
             {
                 return true;
@@ -537,6 +564,12 @@ public class StoryGraphView : GraphView
         if (obj is VideoClip clip)
         {
             CreateNodeUI<PlayClipNode>(position, node => node.clip = clip);
+            return true;
+        }
+
+        if (obj is AudioClip audio)
+        {
+            CreateNodeUI<PlayClipNode>(position, node => node.audioClip = audio);
             return true;
         }
 
@@ -601,7 +634,8 @@ public class StoryGraphView : GraphView
 
             ClipboardGroup groupCopy = new ClipboardGroup
             {
-                title = group.title
+                title = group.title,
+                collapsed = group.collapsed
             };
             foreach (GraphElement contained in group.containedElements)
             {
@@ -784,7 +818,8 @@ public class StoryGraphView : GraphView
                 StoryGroupData restored = new StoryGroupData
                 {
                     guid = Guid.NewGuid().ToString(),
-                    title = string.IsNullOrEmpty(groupCopy.title) ? "Group" : groupCopy.title
+                    title = string.IsNullOrEmpty(groupCopy.title) ? "Group" : groupCopy.title,
+                    collapsed = groupCopy.collapsed
                 };
 
                 if (groupCopy.nodeGuids != null)
@@ -1028,7 +1063,7 @@ public class StoryGraphView : GraphView
             return null;
         }
 
-        Edge edge = outPort.ConnectTo(inPort);
+        Edge edge = outPort.ConnectTo<StoryGraphEdge>(inPort);
         AddElement(edge);
         return edge;
     }
@@ -1076,6 +1111,7 @@ public class StoryGraphView : GraphView
     private class ClipboardGroup
     {
         public string title;
+        public bool collapsed;
         public List<string> nodeGuids = new List<string>();
         public List<string> stickyGuids = new List<string>();
     }

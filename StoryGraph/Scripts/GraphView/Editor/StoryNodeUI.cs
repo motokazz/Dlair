@@ -26,6 +26,9 @@ public class StoryNodeUI : Node
     private Button exitGameFoldButton;
     private VisualElement exitGameSettingsBody;
     private bool syncingExitGameCollapse;
+    private Button spawnPrefabFoldButton;
+    private VisualElement spawnPrefabSettingsBody;
+    private bool syncingSpawnPrefabCollapse;
     private const float ChoiceNodeWidth = 248f;
 
     public StoryNodeUI(BaseNode nodeData)
@@ -44,7 +47,7 @@ public class StoryNodeUI : Node
         {
             // Exit / Exit Game / Goto は入力のみ。Exit Game は終了、Goto の行先はドロップダウンで指定する
         }
-        else if (nodeData is ConditionNode)
+        else if (nodeData is ConditionNode || nodeData is ConditionMultiNode)
         {
             Port truePort = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
             truePort.portName = "True";
@@ -80,9 +83,12 @@ public class StoryNodeUI : Node
             expanded = expandedChoice.nodeExpanded;
         else if (data is ExitGameNode expandedExitGame)
             expanded = expandedExitGame.nodeExpanded;
+        else if (data is SpawnPrefabNode expandedSpawn)
+            expanded = expandedSpawn.nodeExpanded;
         BindPlayClipCollapse();
         BindChoiceCollapse();
         BindExitGameCollapse();
+        BindSpawnPrefabCollapse();
         RefreshExpandedState();
         RefreshPorts();
         ApplyNodeStyle();
@@ -188,10 +194,10 @@ public class StoryNodeUI : Node
         {
             titleColor = new Color(0.20f, 0.55f, 0.25f);
         }
-        else if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode)
+        else if (data is ConditionNode || data is ConditionMultiNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode)
         {
             titleColor = new Color(0.48f, 0.22f, 0.62f);
-            if (data is VariableDeclareNode) style.minWidth = 300;
+            if (data is VariableDeclareNode || data is ConditionMultiNode) style.minWidth = 300;
         }
         else if (data is PlaybackSpeedNode)
         {
@@ -270,7 +276,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is WaitNode || data is TextNode || data is VariableTextNode || data is SpawnPrefabNode || data is ExitGameNode)
+        if (data is ConditionNode || data is ConditionMultiNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is WaitNode || data is TextNode || data is VariableTextNode || data is SpawnPrefabNode || data is ExitGameNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -333,6 +339,11 @@ public class StoryNodeUI : Node
             {
                 shownExitGame.nodeExpanded = true;
                 UnityEditor.EditorUtility.SetDirty(shownExitGame);
+            }
+            if (data is SpawnPrefabNode shownSpawn && !shownSpawn.nodeExpanded)
+            {
+                shownSpawn.nodeExpanded = true;
+                UnityEditor.EditorUtility.SetDirty(shownSpawn);
             }
             RefreshExpandedState();
             helpLabel.style.display = DisplayStyle.Flex;
@@ -486,6 +497,45 @@ public class StoryNodeUI : Node
         finally
         {
             syncingExitGameCollapse = false;
+        }
+    }
+
+    private void BindSpawnPrefabCollapse()
+    {
+        if (data is not SpawnPrefabNode spawnNode) return;
+
+        Toggle collapse = this.Q<Toggle>("collapse-button");
+        if (collapse != null)
+        {
+            collapse.tooltip = "ノード全体の折りたたみと展開";
+            collapse.RegisterValueChangedCallback(_ =>
+            {
+                if (syncingSpawnPrefabCollapse) return;
+                RecordNodeUndo("ノードを折りたたむ");
+                spawnNode.nodeExpanded = expanded;
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+            });
+        }
+
+        Undo.undoRedoPerformed += SyncSpawnPrefabCollapse;
+        RegisterCallback<DetachFromPanelEvent>(_ => Undo.undoRedoPerformed -= SyncSpawnPrefabCollapse);
+    }
+
+    private void SyncSpawnPrefabCollapse()
+    {
+        if (syncingSpawnPrefabCollapse || data is not SpawnPrefabNode spawnNode) return;
+
+        syncingSpawnPrefabCollapse = true;
+        try
+        {
+            if (expanded != spawnNode.nodeExpanded)
+                expanded = spawnNode.nodeExpanded;
+            if (spawnPrefabFoldButton != null && spawnPrefabSettingsBody != null)
+                ApplySettingsFold(spawnPrefabFoldButton, spawnPrefabSettingsBody, spawnNode.settingsExpanded);
+        }
+        finally
+        {
+            syncingSpawnPrefabCollapse = false;
         }
     }
 
@@ -1061,6 +1111,10 @@ public class StoryNodeUI : Node
             });
             extensionContainer.Add(valField);
         }
+        else if (data is ConditionMultiNode conditionMultiNode)
+        {
+            DrawConditionMultiSettings(conditionMultiNode);
+        }
         // ==========================================
         // ★追加：もしデータが VariableOperationNode だったら…
         // ==========================================
@@ -1461,7 +1515,24 @@ public class StoryNodeUI : Node
         }
         else if (data is SpawnPrefabNode spawnNode)
         {
-            AddHelpButton("Choice などの出力からつなぐと、クリック位置にプレハブを出します。破棄はプレハブ側の AutoRelease が担当します。");
+            Label helpLabel = AddHelpButton(SpawnPrefabNode.Summary);
+            if (helpLabel != null) helpLabel.style.maxWidth = 220;
+
+            spawnPrefabSettingsBody = new VisualElement();
+            spawnPrefabFoldButton = new Button(() =>
+            {
+                RecordNodeUndo("設定を折りたたむ");
+                spawnNode.settingsExpanded = !spawnNode.settingsExpanded;
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+                ApplySettingsFold(spawnPrefabFoldButton, spawnPrefabSettingsBody, spawnNode.settingsExpanded);
+                RefreshExpandedState();
+            })
+            {
+                tooltip = "設定項目の折りたたみと展開"
+            };
+            ApplySettingsFold(spawnPrefabFoldButton, spawnPrefabSettingsBody, spawnNode.settingsExpanded);
+            extensionContainer.Add(spawnPrefabFoldButton);
+            extensionContainer.Add(spawnPrefabSettingsBody);
 
             ObjectField prefabField = new ObjectField("Prefab")
             {
@@ -1475,7 +1546,7 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(spawnNode);
                 RefreshDynamicTitle();
             });
-            extensionContainer.Add(prefabField);
+            spawnPrefabSettingsBody.Add(prefabField);
 
             Toggle pointerToggle = new Toggle("ポインタ位置に出す")
             {
@@ -1488,7 +1559,7 @@ public class StoryNodeUI : Node
                 spawnNode.spawnAtPointer = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(spawnNode);
             });
-            extensionContainer.Add(pointerToggle);
+            spawnPrefabSettingsBody.Add(pointerToggle);
 
             Toggle canvasToggle = new Toggle("Canvas 配下に出す")
             {
@@ -1501,9 +1572,13 @@ public class StoryNodeUI : Node
                 spawnNode.parentToCanvas = evt.newValue;
                 UnityEditor.EditorUtility.SetDirty(spawnNode);
             });
-            extensionContainer.Add(canvasToggle);
+            spawnPrefabSettingsBody.Add(canvasToggle);
 
-            Toggle uiParentToggle = AddUiParentToggle(spawnNode, spawnNode.parentToUiParent, value => spawnNode.parentToUiParent = value);
+            Toggle uiParentToggle = AddUiParentToggle(
+                spawnNode,
+                spawnNode.parentToUiParent,
+                value => spawnNode.parentToUiParent = value,
+                spawnPrefabSettingsBody);
             uiParentToggle.style.display = spawnNode.parentToCanvas ? DisplayStyle.Flex : DisplayStyle.None;
             canvasToggle.RegisterValueChangedCallback(evt =>
             {
@@ -1521,7 +1596,20 @@ public class StoryNodeUI : Node
                 spawnNode.worldDistance = Mathf.Max(0.01f, evt.newValue);
                 UnityEditor.EditorUtility.SetDirty(spawnNode);
             });
-            extensionContainer.Add(distanceField);
+            spawnPrefabSettingsBody.Add(distanceField);
+
+            Toggle persistToggle = new Toggle("永続化")
+            {
+                value = spawnNode.persist,
+                tooltip = "オン: Goto などのジャンプ後も残す。オフ: ジャンプで片づける。AutoRelease はどちらでも破棄する"
+            };
+            persistToggle.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                spawnNode.persist = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(spawnNode);
+            });
+            spawnPrefabSettingsBody.Add(persistToggle);
         }
         else if (data is RandomBranchNode randomBranchNode)
         {
@@ -1822,7 +1910,7 @@ public class StoryNodeUI : Node
 
             if (alreadyConnected) continue;
 
-            Edge created = outputPort.ConnectTo(input);
+            Edge created = outputPort.ConnectTo<StoryGraphEdge>(input);
             if (created != null)
             {
                 view.AddElement(created);
@@ -2531,8 +2619,296 @@ public class StoryNodeUI : Node
             evt.StopPropagation();
         });
         row.RegisterCallback<MouseEnterEvent>(_ => RefreshLabel());
-        RegisterCallback<AttachToPanelEvent>(_ => RefreshLabel());
-        RegisterCallback<DetachFromPanelEvent>(_ => GotoDestinationPopup.Close());
+        row.RegisterCallback<AttachToPanelEvent>(_ => RefreshLabel());
+        row.RegisterCallback<DetachFromPanelEvent>(_ => GotoDestinationPopup.Close());
+
+        RefreshLabel();
+        return row;
+    }
+
+    /// <summary>
+    /// 複数条件ノードの判定と、条件の一覧。
+    /// </summary>
+    private void DrawConditionMultiSettings(ConditionMultiNode node)
+    {
+        Label helpLabel = AddHelpButton(node.GetHelpText());
+        if (helpLabel != null) helpLabel.style.maxWidth = 280;
+
+        EnumField matchField = new EnumField("判定", node.match)
+        {
+            tooltip = "全て: すべての条件が True。いずれか: 1つでも True。"
+        };
+        matchField.RegisterValueChangedCallback(evt =>
+        {
+            RecordNodeUndo();
+            node.match = (ConditionMultiMatch)evt.newValue;
+            UnityEditor.EditorUtility.SetDirty(node);
+            RefreshDynamicTitle();
+        });
+        extensionContainer.Add(matchField);
+
+        VisualElement list = new VisualElement();
+        extensionContainer.Add(list);
+        RedrawConditionMultiList(node, list);
+
+        Button addButton = new Button(() =>
+        {
+            BeginGraphEdit("条件を追加");
+            if (node.conditions == null) node.conditions = new List<ConditionMultiEntry>();
+            node.conditions.Add(new ConditionMultiEntry());
+            UnityEditor.EditorUtility.SetDirty(node);
+            RedrawConditionMultiList(node, list);
+            EndGraphEdit();
+        })
+        {
+            text = "＋ 条件を追加"
+        };
+        extensionContainer.Add(addButton);
+    }
+
+    private void RedrawConditionMultiList(ConditionMultiNode node, VisualElement container)
+    {
+        container.Clear();
+        if (node.conditions == null) node.conditions = new List<ConditionMultiEntry>();
+
+        for (int i = 0; i < node.conditions.Count; i++)
+        {
+            int index = i;
+            ConditionMultiEntry entry = node.conditions[index];
+            if (entry == null)
+            {
+                entry = new ConditionMultiEntry();
+                node.conditions[index] = entry;
+            }
+
+            VisualElement card = new VisualElement();
+            card.style.marginBottom = 6;
+            card.style.paddingLeft = 4;
+            card.style.paddingRight = 4;
+            card.style.paddingTop = 4;
+            card.style.paddingBottom = 4;
+            card.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.18f));
+            card.style.borderTopLeftRadius = 4;
+            card.style.borderTopRightRadius = 4;
+            card.style.borderBottomLeftRadius = 4;
+            card.style.borderBottomRightRadius = 4;
+
+            VisualElement header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+
+            Label headerLabel = new Label("条件 " + (index + 1));
+            headerLabel.style.flexGrow = 1;
+            headerLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            headerLabel.style.color = new StyleColor(new Color(0.85f, 0.85f, 0.85f));
+            header.Add(headerLabel);
+
+            Button deleteButton = new Button(() =>
+            {
+                BeginGraphEdit("条件を削除");
+                if (index >= 0 && index < node.conditions.Count)
+                {
+                    node.conditions.RemoveAt(index);
+                }
+
+                UnityEditor.EditorUtility.SetDirty(node);
+                RedrawConditionMultiList(node, container);
+                EndGraphEdit();
+            })
+            {
+                text = "✕"
+            };
+            deleteButton.style.width = 25;
+            header.Add(deleteButton);
+            card.Add(header);
+
+            EnumField sourceField = new EnumField("参照", entry.source)
+            {
+                tooltip = "変数の値か、StoryGotoUnlocks.json の再生記録か。"
+            };
+            sourceField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.source = (ConditionMultiSource)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RedrawConditionMultiList(node, container);
+            });
+            card.Add(sourceField);
+
+            if (entry.source == ConditionMultiSource.Visit)
+            {
+                card.Add(CreateLabelDropdown(
+                    "ラベル",
+                    () => entry.visitGraph,
+                    () => entry.visitLabelGuid,
+                    (graph, guid) =>
+                    {
+                        entry.visitGraph = graph;
+                        entry.visitLabelGuid = guid;
+                    },
+                    "このグラフのアセット名と Label の組を StoryGotoUnlocks.json で見ます。再生済みは 1、未再生は 0 です。"));
+            }
+            else
+            {
+                card.Add(CreateVariableDropdown(
+                    "変数名",
+                    () => entry.variableName,
+                    value => entry.variableName = value,
+                    "比較する変数"));
+            }
+
+            EnumField opField = new EnumField("条件", entry.comparison);
+            opField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.comparison = (ConditionOperator)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+            });
+            card.Add(opField);
+
+            IntegerField valueField = new IntegerField("比較する値")
+            {
+                value = entry.compareValue,
+                tooltip = entry.source == ConditionMultiSource.Visit
+                    ? "再生済みは 1、未再生は 0 です。"
+                    : "Bool 変数は Off=0 / On=1 として判定します。"
+            };
+            valueField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.compareValue = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+            });
+            card.Add(valueField);
+            container.Add(card);
+        }
+
+        RefreshDynamicTitle();
+    }
+
+    /// <summary>
+    /// 再生記録の Label 選択。手入力はしない。クリックで Goto と同じ検索窓を開く。
+    /// </summary>
+    private VisualElement CreateLabelDropdown(
+        string label,
+        Func<StoryGraph> getGraph,
+        Func<string> getGuid,
+        Action<StoryGraph, string> setValue,
+        string tooltip)
+    {
+        const string unset = "(未選択)";
+        List<LabelOption> options = new List<LabelOption>();
+
+        VisualElement row = new VisualElement();
+        row.AddToClassList("unity-base-field");
+        row.AddToClassList("unity-popup-field");
+        row.AddToClassList("unity-base-popup-field");
+
+        Label fieldLabel = new Label(label)
+        {
+            tooltip = tooltip
+        };
+        fieldLabel.AddToClassList("unity-base-field__label");
+        fieldLabel.AddToClassList("unity-popup-field__label");
+        fieldLabel.AddToClassList("unity-base-popup-field__label");
+
+        VisualElement input = new VisualElement
+        {
+            tooltip = "クリックしてラベルを検索します。"
+        };
+        input.AddToClassList("unity-base-field__input");
+        input.AddToClassList("unity-popup-field__input");
+        input.AddToClassList("unity-base-popup-field__input");
+
+        Label valueLabel = new Label(unset)
+        {
+            pickingMode = PickingMode.Ignore
+        };
+        valueLabel.AddToClassList("unity-base-popup-field__text");
+        valueLabel.style.flexGrow = 1;
+        valueLabel.style.overflow = Overflow.Hidden;
+        valueLabel.style.textOverflow = TextOverflow.Ellipsis;
+        valueLabel.style.whiteSpace = WhiteSpace.NoWrap;
+
+        Color fieldText = new Color(0.85f, 0.85f, 0.85f);
+        fieldLabel.style.color = new StyleColor(fieldText);
+        valueLabel.style.color = new StyleColor(fieldText);
+
+        VisualElement arrow = new VisualElement { pickingMode = PickingMode.Ignore };
+        arrow.AddToClassList("unity-base-popup-field__arrow");
+        input.Add(valueLabel);
+        input.Add(arrow);
+        row.Add(fieldLabel);
+        row.Add(input);
+
+        void RefreshLabel()
+        {
+            string guid = getGuid() ?? "";
+            RebuildLabelOptions(guid, getGraph(), options);
+            string selected = unset;
+            if (!string.IsNullOrEmpty(guid))
+            {
+                for (int i = 1; i < options.Count; i++)
+                {
+                    if (options[i].labelGuid == guid)
+                    {
+                        selected = options[i].display;
+                        break;
+                    }
+                }
+            }
+
+            valueLabel.text = selected;
+            input.tooltip = selected;
+            RefreshDynamicTitle();
+        }
+
+        void OpenPopup()
+        {
+            string guid = getGuid() ?? "";
+            RebuildLabelOptions(guid, getGraph(), options);
+            var snapshot = new List<LabelOption>(options.Count);
+            var labels = new List<string>(options.Count);
+            int selectedIndex = 0;
+            for (int i = 0; i < options.Count; i++)
+            {
+                snapshot.Add(options[i]);
+                labels.Add(options[i].display);
+                if (i > 0 && options[i].labelGuid == guid) selectedIndex = i;
+            }
+
+            GotoDestinationPopup.Show(input, labels, selectedIndex, index =>
+            {
+                if (index < 0 || index >= snapshot.Count) return;
+
+                LabelOption picked = snapshot[index];
+                StoryGraph nextGraph = picked == null || string.IsNullOrEmpty(picked.labelGuid) ? null : picked.graph;
+                string nextGuid = picked == null || string.IsNullOrEmpty(picked.labelGuid) ? "" : picked.labelGuid;
+                if (nextGuid == (getGuid() ?? "") && nextGraph == getGraph())
+                {
+                    RefreshLabel();
+                    return;
+                }
+
+                RecordNodeUndo();
+                setValue(nextGraph, nextGuid);
+                UnityEditor.EditorUtility.SetDirty(data);
+                RefreshLabel();
+            }, "Dlair.LabelPicker.Query", "ラベル名で絞り込みます。");
+        }
+
+        input.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
+        input.RegisterCallback<PointerUpEvent>(evt =>
+        {
+            if (evt.button != 0) return;
+            OpenPopup();
+            evt.StopPropagation();
+        });
+        row.RegisterCallback<MouseEnterEvent>(_ => RefreshLabel());
+        row.RegisterCallback<AttachToPanelEvent>(_ => RefreshLabel());
+        row.RegisterCallback<DetachFromPanelEvent>(_ => GotoDestinationPopup.Close());
 
         RefreshLabel();
         return row;
@@ -2674,6 +3050,11 @@ public class StoryNodeUI : Node
 
     private void RebuildGotoOptions(GotoNode gotoNode, List<LabelOption> options)
     {
+        RebuildLabelOptions(gotoNode.targetLabelGuid, gotoNode.targetGraph, options);
+    }
+
+    private void RebuildLabelOptions(string selectedGuid, StoryGraph selectedGraph, List<LabelOption> options)
+    {
         options.Clear();
         options.Add(new LabelOption { display = "(未選択)", labelGuid = "", graph = null });
         CollectLabelOptions(options);
@@ -2698,28 +3079,20 @@ public class StoryNodeUI : Node
             }
         }
 
-        bool found = string.IsNullOrEmpty(gotoNode.targetLabelGuid);
+        if (string.IsNullOrEmpty(selectedGuid)) return;
+
         for (int i = 1; i < options.Count; i++)
         {
-            if (options[i].labelGuid == gotoNode.targetLabelGuid)
-            {
-                found = true;
-                break;
-            }
+            if (options[i].labelGuid == selectedGuid) return;
         }
 
-        if (!found)
+        string shortGuid = selectedGuid.Length > 8 ? selectedGuid.Substring(0, 8) : selectedGuid;
+        options.Insert(1, new LabelOption
         {
-            string shortGuid = gotoNode.targetLabelGuid.Length > 8
-                ? gotoNode.targetLabelGuid.Substring(0, 8)
-                : gotoNode.targetLabelGuid;
-            options.Insert(1, new LabelOption
-            {
-                display = "(欠損) " + shortGuid,
-                labelGuid = gotoNode.targetLabelGuid,
-                graph = gotoNode.targetGraph
-            });
-        }
+            display = "(欠損) " + shortGuid,
+            labelGuid = selectedGuid,
+            graph = selectedGraph
+        });
     }
 
     private void CollectLabelOptions(List<LabelOption> options)

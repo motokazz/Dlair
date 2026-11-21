@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -8,7 +9,6 @@ using UnityEngine.UI;
 /// </summary>
 public class StoryLabelTreePanel : MonoBehaviour
 {
-    private const float RowHeight = 36f;
     private const float ToggleWidth = 28f;
 
     private static readonly List<StoryLabelTreePanel> instances = new List<StoryLabelTreePanel>();
@@ -22,6 +22,8 @@ public class StoryLabelTreePanel : MonoBehaviour
     [Header("表示")]
     public GotoPanelOverride displayOverride = GotoPanelOverride.EntrySettings;
     public bool startExpanded = true;
+    [Tooltip("各行の高さ。文字サイズより低いと文字が欠けます")]
+    public float rowHeight = 36f;
     public int rowFontSize = 18;
     public Color rowColor = new Color(1f, 1f, 1f, 0.08f);
     public Color textColor = new Color(0.89f, 0.89f, 0.89f, 1f);
@@ -48,6 +50,10 @@ public class StoryLabelTreePanel : MonoBehaviour
     public int indent = 0;
 
     private readonly List<RowView> rows = new List<RowView>();
+    private TMP_InputField searchField;
+    private RectTransform searchTextArea;
+    private RectTransform listArea;
+    private string searchQuery = string.Empty;
 
     private class RowView
     {
@@ -57,6 +63,7 @@ public class StoryLabelTreePanel : MonoBehaviour
         public GameObject root;
         public GameObject childrenHost;
         public Button jumpButton;
+        public LabelNode jumpLabel;
         public Button toggleButton;
         public TMP_Text toggleLabel;
         public TMP_Text titleLabel;
@@ -65,6 +72,8 @@ public class StoryLabelTreePanel : MonoBehaviour
     private void OnEnable()
     {
         if (!instances.Contains(this)) instances.Add(this);
+        StoryVisitLog.OnChanged -= RefreshDisplay;
+        StoryVisitLog.OnChanged += RefreshDisplay;
         EnsurePlayer();
         EnsureHierarchy();
         Rebuild();
@@ -72,11 +81,13 @@ public class StoryLabelTreePanel : MonoBehaviour
 
     private void OnDisable()
     {
+        StoryVisitLog.OnChanged -= RefreshDisplay;
         instances.Remove(this);
     }
 
     private void OnValidate()
     {
+        rowHeight = Mathf.Max(1f, rowHeight);
         contentPaddingLeft = Mathf.Max(0, contentPaddingLeft);
         contentPaddingRight = Mathf.Max(0, contentPaddingRight);
         contentPaddingTop = Mathf.Max(0, contentPaddingTop);
@@ -121,19 +132,14 @@ public class StoryLabelTreePanel : MonoBehaviour
         StoryLabelTreeNode tree = StoryLabelTree.Build(root);
         if (tree == null) return;
 
-        if (!tree.CanJump && tree.HasChildren)
+        List<StoryLabelTreeNode> graphs = FlattenConnectedGraphs(tree);
+        for (int i = 0; i < graphs.Count; i++)
         {
-            for (int i = 0; i < tree.children.Count; i++)
-            {
-                CreateRows(tree.children[i], 0, contentRoot);
-            }
-        }
-        else
-        {
-            CreateRows(tree, 0, contentRoot);
+            CreateRows(graphs[i], 0, contentRoot);
         }
 
         RefreshDisplay();
+        ApplySearch();
     }
 
     public void RefreshDisplay()
@@ -199,11 +205,11 @@ public class StoryLabelTreePanel : MonoBehaviour
         int padRight = Mathf.Max(0, rowPaddingRight);
         int padTop = Mathf.Max(0, rowPaddingTop);
         int padBottom = Mathf.Max(0, rowPaddingBottom);
-        float rowHeight = RowHeight + padTop + padBottom;
+        float totalHeight = rowHeight + padTop + padBottom;
 
         LayoutElement layoutElement = root.GetComponent<LayoutElement>();
-        layoutElement.minHeight = rowHeight;
-        layoutElement.preferredHeight = rowHeight;
+        layoutElement.minHeight = totalHeight;
+        layoutElement.preferredHeight = totalHeight;
         layoutElement.flexibleWidth = 1f;
 
         HorizontalLayoutGroup rowLayout = root.GetComponent<HorizontalLayoutGroup>();
@@ -246,9 +252,10 @@ public class StoryLabelTreePanel : MonoBehaviour
         row.jumpButton.GetComponent<LayoutElement>().flexibleWidth = 1f;
         row.titleLabel.text = node.title;
         row.titleLabel.alignment = TextAlignmentOptions.MidlineLeft;
-        if (node.CanJump)
+        row.jumpLabel = depth == 0 ? FindEntryLabel(node.graph) : node.label;
+        if (row.jumpLabel != null && node.graph != null)
         {
-            string labelName = node.label.GetDisplayName();
+            string labelName = row.jumpLabel.GetDisplayName();
             StoryGraph destGraph = node.graph;
             row.jumpButton.onClick.AddListener(() => JumpTo(labelName, destGraph));
         }
@@ -278,7 +285,7 @@ public class StoryLabelTreePanel : MonoBehaviour
             layoutElement.flexibleWidth = 1f;
         }
 
-        layoutElement.minHeight = RowHeight - 4f;
+        layoutElement.minHeight = Mathf.Max(1f, rowHeight - 4f);
 
         GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
         textGo.layer = gameObject.layer;
@@ -316,23 +323,223 @@ public class StoryLabelTreePanel : MonoBehaviour
     private void Toggle(RowView row)
     {
         row.expanded = !row.expanded;
-        if (row.toggleLabel != null)
+        ApplySearch();
+    }
+
+    private void OnSearchChanged(string value)
+    {
+        searchQuery = value ?? string.Empty;
+        ApplySearch();
+    }
+
+    private void ApplySearch()
+    {
+        string query = string.IsNullOrWhiteSpace(searchQuery) ? string.Empty : searchQuery.Trim();
+        bool filtering = query.Length > 0;
+        int count = rows.Count;
+        var visible = new bool[count];
+
+        for (int i = count - 1; i >= 0; i--)
         {
-            row.toggleLabel.text = row.expanded ? "-" : "+";
+            bool show = !filtering || TitleContains(rows[i].node, query);
+            if (!show)
+            {
+                int depth = rows[i].depth;
+                for (int j = i + 1; j < count && rows[j].depth > depth; j++)
+                {
+                    if (!visible[j]) continue;
+                    show = true;
+                    break;
+                }
+            }
+
+            visible[i] = show;
         }
 
-        if (row.childrenHost != null)
+        if (filtering)
         {
-            row.childrenHost.SetActive(row.expanded);
+            for (int i = 0; i < count; i++)
+            {
+                if (!TitleContains(rows[i].node, query)) continue;
+                int depth = rows[i].depth;
+                for (int j = i + 1; j < count && rows[j].depth > depth; j++)
+                {
+                    if (rows[j].depth != depth + 1) continue;
+                    visible[j] = true;
+                }
+            }
         }
+
+        for (int i = 0; i < count; i++)
+        {
+            RowView row = rows[i];
+            if (row.root != null) row.root.SetActive(visible[i]);
+            if (row.childrenHost == null) continue;
+
+            bool descendant = false;
+            if (filtering)
+            {
+                int depth = row.depth;
+                for (int j = i + 1; j < count && rows[j].depth > depth; j++)
+                {
+                    if (!visible[j]) continue;
+                    descendant = true;
+                    break;
+                }
+
+                if (descendant) row.expanded = true;
+            }
+
+            bool showHost = filtering ? row.expanded && descendant : row.expanded;
+            if (row.toggleLabel != null)
+            {
+                row.toggleLabel.text = showHost ? "-" : "+";
+            }
+
+            row.childrenHost.SetActive(showHost);
+        }
+    }
+
+    private static List<StoryLabelTreeNode> FlattenConnectedGraphs(StoryLabelTreeNode root)
+    {
+        var graphs = new List<StoryLabelTreeNode>();
+        CollectGraphHeaders(root, graphs, new HashSet<StoryGraph>());
+        graphs.Sort(CompareTitle);
+
+        for (int i = 0; i < graphs.Count; i++)
+        {
+            StoryLabelTreeNode graphNode = graphs[i];
+            var labels = new List<StoryLabelTreeNode>();
+            var seenLabels = new HashSet<LabelNode>();
+            AddLabel(labels, seenLabels, graphNode.graph, graphNode.label);
+
+            if (graphNode.children != null)
+            {
+                for (int c = 0; c < graphNode.children.Count; c++)
+                {
+                    StoryLabelTreeNode child = graphNode.children[c];
+                    if (child == null || child.graph != graphNode.graph) continue;
+                    AddLabel(labels, seenLabels, graphNode.graph, child.label);
+                }
+            }
+
+            labels.Sort(CompareTitle);
+            graphNode.children = labels;
+        }
+
+        return graphs;
+    }
+
+    private static void CollectGraphHeaders(StoryLabelTreeNode node, List<StoryLabelTreeNode> graphs, HashSet<StoryGraph> seen)
+    {
+        if (node == null) return;
+        if (node.graph != null && seen.Add(node.graph))
+        {
+            graphs.Add(node);
+        }
+
+        if (node.children == null) return;
+        for (int i = 0; i < node.children.Count; i++)
+        {
+            CollectGraphHeaders(node.children[i], graphs, seen);
+        }
+    }
+
+    private static void AddLabel(List<StoryLabelTreeNode> labels, HashSet<LabelNode> seen, StoryGraph graph, LabelNode label)
+    {
+        if (graph == null || label == null || !seen.Add(label)) return;
+        labels.Add(new StoryLabelTreeNode
+        {
+            title = label.GetDisplayName(),
+            graph = graph,
+            label = label
+        });
+    }
+
+    private static int CompareTitle(StoryLabelTreeNode a, StoryLabelTreeNode b)
+    {
+        return string.Compare(a?.title ?? string.Empty, b?.title ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TitleContains(StoryLabelTreeNode node, string query)
+    {
+        if (node == null || string.IsNullOrEmpty(node.title)) return false;
+        return node.title.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static LabelNode FindEntryLabel(StoryGraph graph)
+    {
+        if (graph?.nodes == null) return null;
+
+        StartNode start = null;
+        LabelNode firstLabel = null;
+        for (int i = 0; i < graph.nodes.Count; i++)
+        {
+            BaseNode current = graph.nodes[i];
+            if (current is StartNode foundStart && start == null) start = foundStart;
+            if (current is LabelNode label && firstLabel == null) firstLabel = label;
+        }
+
+        if (start == null) return firstLabel;
+
+        var path = new List<string>();
+        BaseNode cursor = start;
+        for (int step = 0; cursor != null && step < 64; step++)
+        {
+            if (string.IsNullOrEmpty(cursor.guid) || path.Contains(cursor.guid)) break;
+            path.Add(cursor.guid);
+            cursor = graph.GetNextNode(cursor.guid, "Next");
+        }
+
+        LabelNode best = null;
+        int bestPathIndex = int.MaxValue;
+        int bestSteps = int.MaxValue;
+        for (int i = 0; i < graph.nodes.Count; i++)
+        {
+            if (graph.nodes[i] is not LabelNode label) continue;
+            if (!TryJoinStartPath(graph, label, path, 64, out int pathIndex, out int steps)) continue;
+            if (pathIndex > bestPathIndex) continue;
+            if (pathIndex == bestPathIndex && steps >= bestSteps) continue;
+            bestPathIndex = pathIndex;
+            bestSteps = steps;
+            best = label;
+        }
+
+        return best != null ? best : firstLabel;
+    }
+
+    private static bool TryJoinStartPath(StoryGraph graph, BaseNode from, List<string> path, int limit, out int pathIndex, out int steps)
+    {
+        pathIndex = -1;
+        steps = -1;
+        BaseNode current = from;
+        var seen = new HashSet<string>();
+        for (int step = 0; current != null && step <= limit; step++)
+        {
+            if (!string.IsNullOrEmpty(current.guid))
+            {
+                int index = path.IndexOf(current.guid);
+                if (index >= 0)
+                {
+                    pathIndex = index;
+                    steps = step;
+                    return true;
+                }
+            }
+
+            if (string.IsNullOrEmpty(current.guid) || !seen.Add(current.guid)) return false;
+            current = graph.GetNextNode(current.guid, "Next");
+        }
+
+        return false;
     }
 
     private void ApplyDisplay(RowView row)
     {
         if (row?.jumpButton == null || row.node == null) return;
 
-        bool canJump = row.node.CanJump;
-        bool unlocked = !canJump || StoryGotoPanel.IsUnlocked(row.node.label.GetDisplayName());
+        bool canJump = row.jumpLabel != null && row.node.graph != null;
+        bool unlocked = !canJump || row.node.graph.IsLabelVisited(row.jumpLabel.GetDisplayName());
         bool interactable = canJump;
 
         if (displayOverride == GotoPanelOverride.UnlockedOnly)
@@ -447,7 +654,159 @@ public class StoryLabelTreePanel : MonoBehaviour
 
         if (scroll == null) scroll = GetComponent<ScrollRect>();
         EnsureScrollbar(scroll);
+        EnsureSearchField(scroll);
         ApplyContentPadding();
+    }
+
+    private void EnsureSearchField(ScrollRect scroll)
+    {
+        if (searchField == null)
+        {
+            Transform existing = transform.Find("Search");
+            if (existing != null) searchField = existing.GetComponent<TMP_InputField>();
+        }
+
+        if (searchField == null)
+        {
+            GameObject go = new GameObject("Search", typeof(RectTransform), typeof(Image));
+            go.layer = gameObject.layer;
+            go.SetActive(false);
+            go.transform.SetParent(transform, false);
+
+            GameObject textArea = new GameObject("Text Area", typeof(RectTransform), typeof(RectMask2D));
+            textArea.layer = gameObject.layer;
+            searchTextArea = textArea.GetComponent<RectTransform>();
+            searchTextArea.SetParent(go.transform, false);
+
+            TMP_Text placeholder = CreateSearchText(searchTextArea, "Placeholder", "検索");
+            placeholder.raycastTarget = false;
+            TMP_Text text = CreateSearchText(searchTextArea, "Text", string.Empty);
+
+            searchField = go.AddComponent<TMP_InputField>();
+            searchField.targetGraphic = go.GetComponent<Image>();
+            searchField.textViewport = searchTextArea;
+            searchField.textComponent = text;
+            searchField.placeholder = placeholder;
+            searchField.lineType = TMP_InputField.LineType.SingleLine;
+            searchField.resetOnDeActivation = false;
+            searchField.onValueChanged.AddListener(OnSearchChanged);
+            go.SetActive(true);
+        }
+
+        if (searchTextArea == null && searchField.textViewport != null)
+        {
+            searchTextArea = searchField.textViewport;
+        }
+
+        ApplySearchChrome(scroll);
+    }
+
+    private TMP_Text CreateSearchText(RectTransform parent, string name, string text)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+        go.layer = gameObject.layer;
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        Stretch(rect);
+
+        TMP_Text label = go.GetComponent<TextMeshProUGUI>();
+        label.text = text;
+        label.font = TMP_Settings.defaultFontAsset;
+        label.fontSize = rowFontSize;
+        label.color = textColor;
+        label.alignment = TextAlignmentOptions.MidlineLeft;
+        label.enableWordWrapping = false;
+        label.overflowMode = TextOverflowModes.Ellipsis;
+        label.richText = false;
+        return label;
+    }
+
+    private void ApplySearchChrome(ScrollRect scroll)
+    {
+        if (searchField == null) return;
+
+        float height = Mathf.Max(1f, rowHeight);
+        RectTransform rect = searchField.transform as RectTransform;
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(0f, height);
+        }
+
+        Image image = searchField.GetComponent<Image>();
+        if (image != null) image.color = rowColor;
+
+        int padLeft = Mathf.Max(0, rowPaddingLeft);
+        int padRight = Mathf.Max(0, rowPaddingRight);
+        int padTop = Mathf.Max(0, rowPaddingTop);
+        int padBottom = Mathf.Max(0, rowPaddingBottom);
+        if (searchTextArea != null)
+        {
+            searchTextArea.anchorMin = Vector2.zero;
+            searchTextArea.anchorMax = Vector2.one;
+            searchTextArea.offsetMin = new Vector2(padLeft, padBottom);
+            searchTextArea.offsetMax = new Vector2(-padRight, -padTop);
+        }
+
+        searchField.pointSize = rowFontSize;
+        searchField.customCaretColor = true;
+        searchField.caretColor = textColor;
+        if (searchField.textComponent != null)
+        {
+            searchField.textComponent.fontSize = rowFontSize;
+            searchField.textComponent.color = textColor;
+        }
+
+        if (searchField.placeholder is TMP_Text placeholder)
+        {
+            placeholder.fontSize = rowFontSize;
+            Color color = textColor;
+            color.a *= 0.45f;
+            placeholder.color = color;
+        }
+
+        PlaceListBelowSearch(scroll, height);
+        if (rect != null) rect.SetAsLastSibling();
+    }
+
+    private void PlaceListBelowSearch(ScrollRect scroll, float height)
+    {
+        if (listArea == null)
+        {
+            Transform existing = transform.Find("ListArea");
+            if (existing != null) listArea = existing as RectTransform;
+        }
+
+        if (listArea == null)
+        {
+            GameObject go = new GameObject("ListArea", typeof(RectTransform));
+            go.layer = gameObject.layer;
+            listArea = go.GetComponent<RectTransform>();
+            listArea.SetParent(transform, false);
+        }
+
+        listArea.anchorMin = Vector2.zero;
+        listArea.anchorMax = Vector2.one;
+        listArea.pivot = new Vector2(0.5f, 0.5f);
+        listArea.offsetMin = Vector2.zero;
+        listArea.offsetMax = new Vector2(0f, -height);
+
+        if (scroll == null) return;
+
+        if (scroll.viewport != null && scroll.viewport.parent != listArea)
+        {
+            scroll.viewport.SetParent(listArea, false);
+            Stretch(scroll.viewport);
+        }
+
+        RectTransform bar = scroll.verticalScrollbar != null ? scroll.verticalScrollbar.transform as RectTransform : null;
+        if (bar != null && bar.parent != listArea)
+        {
+            bar.SetParent(listArea, false);
+        }
     }
 
     private void ApplyContentPadding()

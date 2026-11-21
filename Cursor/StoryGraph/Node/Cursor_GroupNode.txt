@@ -1,0 +1,20 @@
+目的: ノードのグループ化
+済:
+- Summaryを明記する
+- ノードの折り畳み展開
+- ノードのタイトルを変更できるようにする
+- 折りたたんだ時に入出力の線を表示する
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphGroup.cs
+
+
+決めたこと:
+- Summaryを明記する
+- ノードの折り畳み展開
+- ノードのタイトルを変更できるようにする
+
+触らないこと:
+- Assets/Dlair/StoryGraph以外の場所にあるスクリプト

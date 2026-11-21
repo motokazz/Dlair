@@ -1,0 +1,25 @@
+目的: 複数のVariable可能なノード
+済:
+- Condition Multi ノードを追加した。True / False へ進む
+- 判定は「全て」（AND）と「いずれか」（OR）
+- 各行は Condition と同じ比較演算。変数はドロップダウンで選ぶ
+- 再生記録は StoryGotoUnlocks.json。未再生は 0、再生済みは 1。Label は Goto と同じ検索
+- Summary を付けた
+- 変数名の変更は、複数条件の変数名も対象にする
+
+未:
+
+触るファイル:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/Nodes/
+
+決めたこと:
+- Variableと同等の比較演算を複数同時に行うためのノードを新規作成する
+- StoryGotoUnlocksの情報も扱えるようにしたい
+- 複数の比較演算を行い、全てがTrue、一部Trueなど判定方法のバリエーションが欲しい。一般的なモデルケースがあるのなら、まずはそれを模倣。
+- 判定の基本は「全て」（AND）と「いずれか」（OR）。再生記録は未再生=0、再生済み=1 として Condition と同じ比較演算にする
+- Variable系のノードはドロップダウンで既存の変数から選ぶ。現在の変数を直接入力できる方式は廃止
+- スクリプトにはSummeryをつける
+
+触らないこと:
+- Assets/Dlair/VideoPlayer/Scripts/GraphView/以外の場所にあるファイル
+

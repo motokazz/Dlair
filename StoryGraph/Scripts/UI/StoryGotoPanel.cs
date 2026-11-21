@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -25,7 +24,7 @@ public enum GotoPanelOverride
 }
 
 /// <summary>
-/// Label への移動ボタンを並べる。解放状態を保存し、クリックでそのラベルへ飛ぶ。
+/// Label への移動ボタンを並べる。再生記録を見て、クリックでそのラベルへ飛ぶ。
 /// </summary>
 public class StoryGotoPanel : MonoBehaviour
 {
@@ -56,16 +55,8 @@ public class StoryGotoPanel : MonoBehaviour
     [Tooltip("エントリ未設定時、子ボタンへ一括適用する表示状態")]
     public GotoDisplayState defaultDisplayState = GotoDisplayState.Visible;
 
-    [Header("永続化")]
-    public bool persistUnlocks = true;
-    public string saveKey = "StoryGotoUnlocks";
-
     [Header("行先一覧（空なら子ボタン名＝ラベル名で自動割り当て）")]
     public List<Entry> entries = new List<Entry>();
-
-    private static readonly List<StoryGotoPanel> instances = new List<StoryGotoPanel>();
-    private static HashSet<string> unlockedIds = new HashSet<string>();
-    private static bool unlocksLoaded;
 
     private readonly List<BoundEntry> bound = new List<BoundEntry>();
 
@@ -81,41 +72,26 @@ public class StoryGotoPanel : MonoBehaviour
 
     private void OnEnable()
     {
-        if (!instances.Contains(this)) instances.Add(this);
-        LoadUnlocksIfNeeded();
+        StoryVisitLog.OnChanged -= RefreshDisplay;
+        StoryVisitLog.OnChanged += RefreshDisplay;
         BindButtons();
         RefreshDisplay();
     }
 
     private void OnDisable()
     {
-        instances.Remove(this);
+        StoryVisitLog.OnChanged -= RefreshDisplay;
     }
 
-    public static void NotifyVisited(string labelName)
+    public static bool IsUnlocked(StoryGraph graph, string labelName)
     {
-        if (string.IsNullOrWhiteSpace(labelName)) return;
-        Unlock(labelName.Trim());
-        for (int i = 0; i < instances.Count; i++)
-        {
-            if (instances[i] != null) instances[i].RefreshDisplay();
-        }
+        if (graph == null || string.IsNullOrWhiteSpace(labelName)) return false;
+        if (!graph.TryFindLabelByName(labelName.Trim(), out StoryGraph owner, out LabelNode label))
+            return graph.IsLabelVisited(labelName);
 
-        StoryLabelTreePanel.RefreshAll();
-    }
-
-    public static bool IsUnlocked(string labelName)
-    {
-        LoadUnlocksIfNeeded();
-        return !string.IsNullOrEmpty(labelName) && unlockedIds.Contains(labelName);
-    }
-
-    public static void Unlock(string labelName)
-    {
-        if (string.IsNullOrWhiteSpace(labelName)) return;
-        LoadUnlocksIfNeeded();
-        if (!unlockedIds.Add(labelName.Trim())) return;
-        SaveUnlocks();
+        StoryGraph visitedGraph = owner != null ? owner : graph;
+        string visitedLabel = label != null ? label.GetDisplayName() : labelName.Trim();
+        return visitedGraph.IsLabelVisited(visitedLabel);
     }
 
     public void BindButtons()
@@ -153,7 +129,7 @@ public class StoryGotoPanel : MonoBehaviour
 
     public void RefreshDisplay()
     {
-        LoadUnlocksIfNeeded();
+        EnsurePlayer();
         for (int i = 0; i < bound.Count; i++)
         {
             BoundEntry item = bound[i];
@@ -231,7 +207,7 @@ public class StoryGotoPanel : MonoBehaviour
 
     private void ApplyDisplay(BoundEntry item)
     {
-        bool unlocked = item.unlockedByDefault || IsUnlocked(item.key);
+        bool unlocked = item.unlockedByDefault || IsEntryUnlocked(item);
         bool visible;
         bool interactable;
 
@@ -272,6 +248,15 @@ public class StoryGotoPanel : MonoBehaviour
         item.button.interactable = interactable;
     }
 
+    private bool IsEntryUnlocked(BoundEntry item)
+    {
+        StoryGraph search = item.targetGraph != null ? item.targetGraph : searchGraph;
+        if (search == null && storyPlayer != null)
+            search = storyPlayer.graph;
+
+        return IsUnlocked(search, item.key);
+    }
+
     private void EnsurePlayer()
     {
         if (storyPlayer != null) return;
@@ -280,75 +265,5 @@ public class StoryGotoPanel : MonoBehaviour
 #else
         storyPlayer = FindObjectOfType<StoryPlayer>();
 #endif
-    }
-
-    private static void LoadUnlocksIfNeeded()
-    {
-        if (unlocksLoaded) return;
-        unlocksLoaded = true;
-        unlockedIds.Clear();
-
-        string path = GetSavePath();
-        if (!File.Exists(path)) return;
-
-        try
-        {
-            UnlockSaveData data = JsonUtility.FromJson<UnlockSaveData>(File.ReadAllText(path));
-            if (data?.ids == null) return;
-            for (int i = 0; i < data.ids.Count; i++)
-            {
-                if (!string.IsNullOrEmpty(data.ids[i])) unlockedIds.Add(data.ids[i]);
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"【GotoPanel】解放データの読み込みに失敗しました: {e.Message}");
-        }
-    }
-
-    private static void SaveUnlocks()
-    {
-        bool anyPersist = false;
-        for (int i = 0; i < instances.Count; i++)
-        {
-            if (instances[i] != null && instances[i].persistUnlocks)
-            {
-                anyPersist = true;
-                break;
-            }
-        }
-
-        if (!anyPersist && instances.Count > 0) return;
-
-        UnlockSaveData data = new UnlockSaveData { ids = new List<string>(unlockedIds) };
-        try
-        {
-            File.WriteAllText(GetSavePath(), JsonUtility.ToJson(data, true));
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"【GotoPanel】解放データの保存に失敗しました: {e.Message}");
-        }
-    }
-
-    private static string GetSavePath()
-    {
-        string key = "StoryGotoUnlocks";
-        for (int i = 0; i < instances.Count; i++)
-        {
-            if (instances[i] != null && !string.IsNullOrEmpty(instances[i].saveKey))
-            {
-                key = instances[i].saveKey;
-                break;
-            }
-        }
-
-        return Path.Combine(Application.persistentDataPath, key + ".json");
-    }
-
-    [Serializable]
-    private class UnlockSaveData
-    {
-        public List<string> ids = new List<string>();
     }
 }
