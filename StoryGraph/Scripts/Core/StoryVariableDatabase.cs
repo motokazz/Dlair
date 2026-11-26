@@ -1,16 +1,20 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Video;
 
 /// <summary>
-/// ストーリー変数の型。Int、Bool、Float、String。
+/// ストーリー変数の型。Int、Bool、Float、String、VideoClip、AudioClip、見出し。
 /// </summary>
 public enum StoryVariableType
 {
     Int,
     Bool,
     Float,
-    String
+    String,
+    VideoClip,
+    AudioClip,
+    Heading
 }
 
 /// <summary>
@@ -27,6 +31,8 @@ public class StoryVariableDefinition
     public bool defaultBoolValue = false;
     public float defaultFloatValue = 0f;
     public string defaultStringValue = "";
+    public VideoClip defaultVideoClip;
+    public AudioClip defaultAudioClip;
 }
 
 /// <summary>

@@ -1,0 +1,41 @@
+目的: 宣言した StoryGraph の中だけで有効なローカル変数を、VariableDeclare とは別のノードで宣言できるようにする
+
+済:
+- Local Variable Declare Node を追加した
+- 実行中のグラフにローカル変数を持たせ、そのグラフの外からは見えないようにした
+- 同じグラフの中では、同名のグローバル変数よりローカル変数を使う
+- 変数の選択一覧には、開いているグラフのローカル変数だけを足す
+- ローカル変数はセーブしない
+- VariableDeclare は、これまでどおりグローバル変数へ書く
+- SubGraph Input は、参照先のローカル宣言も入力にし、入る直前にそのグラフのローカル変数へ書く
+- SubGraph Input で書いたローカル変数は、入った直後のローカル宣言では宣言値に戻さない
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/LocalVariableDeclareNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/StoryLocalVariables.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/VariableDeclareNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/SubGraphInputNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/StoryPlayer.cs
+- Assets/Dlair/StoryGraph/Scripts/Core/GameManager.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphView.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphNodeNaming.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryVariableCatalog.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphVariableUtility.cs
+
+決めたこと:
+- 今の VariableDeclare はグローバル変数のまま残す。ローカル宣言は別ノードにする
+- ローカル変数は、宣言ノードがある StoryGraph の実行中だけ有効
+- 別のグラフの同名ローカル変数とは別物
+- そのグラフの実行中は、同名のグローバル変数よりローカル変数を読む・書く
+- グラフに入ったとき、まだ無いローカル変数へ初期値を入れる。ノードを通過したときは宣言値を入れる
+- セーブしない
+- SubGraph Input は、参照先グラフのローカル宣言も入力欄に出す。入る直前に、そのグラフのローカル変数へ書く。グローバル宣言はグローバル変数へ書く
+- SubGraph Input が入る直前に書いた値は、そのあと最初のローカル宣言ノードでは戻さない。もう一度そのノードを通過したときは宣言値を入れる
+- 変数選択には、開いているグラフのローカル変数だけを足す。他グラフのローカル変数は出さない
+
+触らないこと:
+- VariableDeclare をローカル変数に変えること
+- データベース変数のセーブ

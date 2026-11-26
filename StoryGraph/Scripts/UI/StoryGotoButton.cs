@@ -17,7 +17,7 @@ public class StoryGotoButton : MonoBehaviour
         "ボタンのクリックには自動では登録しません。Button の OnClick など、Event から Goto を指定します。\n" +
         "Unlock と併用するときは、Lock がボタンを押せなくします。押したときの Event に、この Goto を登録します。\n" +
         "StoryGraph を割り当て、そのグラフにある Label を一覧から選びます。\n" +
-        "選んだ行先は Label の識別子で保持するので、表示名を変えても維持されます。\n" +
+        "Label の行先は識別子で保持するので、表示名を変えても維持されます。\n" +
         "StoryPlayer が空のときは、シーン内の StoryPlayer を見つけて設定します。";
 
     [Header("参照")]
@@ -45,6 +45,13 @@ public class StoryGotoButton : MonoBehaviour
         if (targetGraph == null)
         {
             Debug.LogError("【GotoButton】StoryGraph が未設定です。");
+            return;
+        }
+
+        if (StoryVisitButtonEntry.IsStartTarget(targetLabelGuid))
+        {
+            if (!storyPlayer.JumpToStart(targetGraph))
+                Debug.LogError("【GotoButton】Start ノードが見つかりません。StoryGraph を確認してください。");
             return;
         }
 
@@ -173,26 +180,7 @@ public class StoryGotoButtonEditor : Editor
         string current = guidProperty.stringValue ?? "";
         List<string> guids = new List<string>();
         List<string> labels = new List<string>();
-        if (graph != null && graph.nodes != null)
-        {
-            HashSet<string> usedDisplays = new HashSet<string>();
-            for (int i = 0; i < graph.nodes.Count; i++)
-            {
-                if (graph.nodes[i] is not LabelNode label) continue;
-                if (string.IsNullOrEmpty(label.guid) || guids.Contains(label.guid)) continue;
-
-                string display = label.GetDisplayName();
-                if (!usedDisplays.Add(display))
-                {
-                    string suffix = label.guid.Length > 4 ? label.guid.Substring(0, 4) : label.guid;
-                    display = display + " " + suffix;
-                    usedDisplays.Add(display);
-                }
-
-                guids.Add(label.guid);
-                labels.Add(display);
-            }
-        }
+        StoryVisitButtonEntry.CollectLabelChoices(graph, guids, labels);
 
         if (guids.Count == 0)
         {
@@ -236,7 +224,7 @@ public class StoryGotoButtonEditor : Editor
         {
             EditorGUI.BeginChangeCheck();
             next = EditorGUILayout.Popup(
-                new GUIContent("行先ラベル", "Goto を呼んだときに移動する Label。指定した StoryGraph の中から選びます。"),
+                new GUIContent("行先ラベル", "Goto を呼んだときに移動する Label。"),
                 index,
                 labels.ToArray());
             changed = EditorGUI.EndChangeCheck();

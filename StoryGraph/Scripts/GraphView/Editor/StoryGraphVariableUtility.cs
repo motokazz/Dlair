@@ -372,7 +372,7 @@ public static class StoryGraphVariableUtility
                 }
             }
 
-            if (node is not VariableDeclareNode) return;
+            if (node is not VariableDeclareNode && node is not LocalVariableDeclareNode) return;
 
             SerializedProperty variables = serialized.FindProperty("variables");
             if (variables == null || !variables.isArray) return;

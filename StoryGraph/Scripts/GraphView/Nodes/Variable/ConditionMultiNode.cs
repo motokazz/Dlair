@@ -153,6 +153,13 @@ public class ConditionMultiNode : BaseNode
             left = "Visit";
             if (entry.visitGraph == null || string.IsNullOrEmpty(entry.visitLabelGuid)) return 0;
 
+            if (StoryVisitButtonEntry.IsStartTarget(entry.visitLabelGuid))
+            {
+                left = StoryVisitButtonEntry.StartTarget;
+                if (StoryPlayer.FindStartNode(entry.visitGraph) == null) return 0;
+                return StoryVisitLog.IsVisited(entry.visitGraph, StoryVisitButtonEntry.StartTarget) ? 1 : 0;
+            }
+
             LabelNode label = entry.visitGraph.FindLabel(entry.visitLabelGuid);
             if (label == null) return 0;
 
@@ -174,8 +181,13 @@ public class ConditionMultiNode : BaseNode
         string left;
         if (entry.source == ConditionMultiSource.Visit)
         {
-            LabelNode label = entry.visitGraph != null ? entry.visitGraph.FindLabel(entry.visitLabelGuid) : null;
-            left = label != null ? label.GetDisplayName() : "Visit";
+            if (StoryVisitButtonEntry.IsStartTarget(entry.visitLabelGuid))
+                left = StoryVisitButtonEntry.StartTarget;
+            else
+            {
+                LabelNode label = entry.visitGraph != null ? entry.visitGraph.FindLabel(entry.visitLabelGuid) : null;
+                left = label != null ? label.GetDisplayName() : "Visit";
+            }
         }
         else
         {

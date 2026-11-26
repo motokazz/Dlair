@@ -551,6 +551,15 @@ public class StoryVariableLockButton : MonoBehaviour
         if (graph == null || string.IsNullOrEmpty(labelGuid))
             return false;
 
+        if (StoryVisitButtonEntry.IsStartTarget(labelGuid))
+        {
+            if (StoryPlayer.FindStartNode(graph) == null)
+                return false;
+            if (Application.isPlaying)
+                unlocked = StoryVisitLog.IsVisited(graph, StoryVisitButtonEntry.StartTarget);
+            return true;
+        }
+
         LabelNode label = graph.FindLabel(labelGuid);
         if (label == null)
             return false;
@@ -1015,26 +1024,7 @@ public class StoryVariableLockButtonEditor : Editor
         string current = guidProperty.stringValue ?? "";
         List<string> guids = new List<string>();
         List<string> labels = new List<string>();
-        if (graph != null && graph.nodes != null)
-        {
-            HashSet<string> usedDisplays = new HashSet<string>();
-            for (int i = 0; i < graph.nodes.Count; i++)
-            {
-                if (graph.nodes[i] is not LabelNode label) continue;
-                if (string.IsNullOrEmpty(label.guid) || guids.Contains(label.guid)) continue;
-
-                string display = label.GetDisplayName();
-                if (!usedDisplays.Add(display))
-                {
-                    string suffix = label.guid.Length > 4 ? label.guid.Substring(0, 4) : label.guid;
-                    display = display + " " + suffix;
-                    usedDisplays.Add(display);
-                }
-
-                guids.Add(label.guid);
-                labels.Add(display);
-            }
-        }
+        StoryVisitButtonEntry.CollectLabelChoices(graph, guids, labels);
 
         if (graphProperty != null && graphProperty.hasMultipleDifferentValues)
         {
@@ -1045,7 +1035,7 @@ public class StoryVariableLockButtonEditor : Editor
 
         if (guids.Count == 0)
         {
-            EditorGUILayout.HelpBox("StoryGraph を指定すると、その Label から選べます。選んだ Label が StoryGotoUnlocks.json にあるとき Unlock です。", MessageType.Info);
+            EditorGUILayout.HelpBox("StoryGraph を指定すると、その Label から選べます。そのグラフのアセット名とラベル名の組が StoryGotoUnlocks.json にあるとき Unlock です。", MessageType.Info);
             return;
         }
 
@@ -1065,7 +1055,7 @@ public class StoryVariableLockButtonEditor : Editor
         }
 
         DrawChoicePopup(
-            new GUIContent("対象ラベル", "Lock 判定に使う Label。グラフのアセット名とラベル名の組を StoryGotoUnlocks.json で見ます。"),
+            new GUIContent("対象ラベル", "Lock 判定に使う Label。"),
             guidProperty,
             guids,
             labels);

@@ -68,6 +68,7 @@ public class StoryGraphView : GraphView
             });
             menuEvent.menu.AppendAction("Create/Flow/Goto Node", _ => CreateNodeUI<GotoNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Flow/Sub Graph Node", _ => CreateNodeUI<SubGraphNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Flow/Sub Graph Input Node", _ => CreateNodeUI<SubGraphInputNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Flow/Exit Node", _ => CreateNodeUI<ExitNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Flow/Exit Game Node", _ => CreateNodeUI<ExitGameNode>(graphPos));
 
@@ -76,7 +77,9 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Media/Playback Speed Node", _ => CreateNodeUI<PlaybackSpeedNode>(graphPos));
 
             menuEvent.menu.AppendAction("Create/Variable/Variable Declare Node", _ => CreateNodeUI<VariableDeclareNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Local Variable Declare Node", _ => CreateNodeUI<LocalVariableDeclareNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Variable Operation Node", _ => CreateNodeUI<VariableOperationNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/Variable/Custom C Node", _ => CreateNodeUI<CustomCNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Bool Operation Node", _ => CreateNodeUI<BoolOperationNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Node", _ => CreateNodeUI<ConditionNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Variable/Condition Multi Node", _ => CreateNodeUI<ConditionMultiNode>(graphPos));
@@ -84,6 +87,7 @@ public class StoryGraphView : GraphView
             menuEvent.menu.AppendAction("Create/Variable/Condition Branch Node", _ => CreateNodeUI<ConditionBranchNode>(graphPos));
 
             menuEvent.menu.AppendAction("Create/UI/Choice Node", _ => CreateNodeUI<ChoiceNode>(graphPos));
+            menuEvent.menu.AppendAction("Create/UI/Choice Node Multi", _ => CreateNodeUI<ChoiceNodeMulti>(graphPos));
             menuEvent.menu.AppendAction("Create/UI/Text Node", _ => CreateNodeUI<TextNode>(graphPos));
             menuEvent.menu.AppendAction("Create/UI/Variable Text Node", _ => CreateNodeUI<VariableTextNode>(graphPos));
             menuEvent.menu.AppendAction("Create/Spawn/Prefab Node", _ => CreateNodeUI<SpawnPrefabNode>(graphPos));

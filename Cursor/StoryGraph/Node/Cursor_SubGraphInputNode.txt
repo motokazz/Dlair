@@ -1,0 +1,45 @@
+目的: サブグラフ呼び出し時に入力値を設定できる新しいノードを作る。Shader Graph の Sub Graph のように、ノード上で入力値を決めてから入る。
+
+済:
+- 既存の SubGraph ノードとは別のノードを追加する
+- 参照する StoryGraph を選べる
+- 参照先にある変数宣言を入力としてノードに並べ、型に合わせて値を設定できる
+- 実行時は、ノードに保存した値を変数へ書いてから、今のサブグラフと同じように入る
+- 作成メニューから置ける
+- ノードのタイトルに参照先のグラフ名を出す
+- 循環参照は拒否する
+- 循環参照の判定、ラベル探索、Goto の戻り、変数宣言の反映、グラフの複製、UI 調整のグラフ走査でも、このノードの参照先を Sub Graph と同じように辿る
+- 参照先のローカル宣言も入力にし、入る直前にそのグラフのローカル変数へ書く。グローバル宣言はグローバル変数へ書く
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphView.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphNodeNaming.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/StoryGraph.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/StoryPlayer.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/StoryLabelTree.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/VariableDeclareNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphCloneUtility.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/DlairAssetsCloneUtility.cs
+- Assets/Dlair/StoryGraph/Scripts/UI/Editor/UiAdjustDebugWindow.cs
+
+決めたこと:
+- 今の SubGraph ノードはいじらない。新しいノードとして作る
+- Shader Graph の Sub Graph のように、呼び出す側のノードで入力値を設定する
+- 入力は参照先グラフの変数宣言とする。値のワイヤや新しいポートは作らない
+- 宣言をノードの入力一覧にする。すでに設定した値は残し、宣言の増減に合わせる。新しい入力の初期値は宣言の初期値
+- 入る直前に、ノードの入力値をその変数へ書く。サブグラフの中は今の変数ノードで読む
+- 参照先のローカル宣言も入力にする。ローカル宣言は、入る直前にそのグラフのローカル変数へ書く。グローバル宣言はグローバル変数へ書く
+- 戻るときに値は戻さない。書いた値は変数に残る
+- 変数宣言が無い参照先でも入れる。入力欄は空
+- 参照先の選び方と循環参照の拒否は、今の Sub Graph ノードと同じ
+- グラフアセットのドロップで作るノードは、今の Sub Graph ノードのまま
+
+触らないこと:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/SubGraphNode.cs
+- SubGraph の入り方と戻り方（EnterSubGraph / ExitSubGraph）の挙動
+- グラフをドロップして Sub Graph ノードを作る処理
+- Assets/Dlair/StoryGraph 以外

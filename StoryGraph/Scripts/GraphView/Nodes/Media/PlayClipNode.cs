@@ -11,7 +11,8 @@ public class PlayClipNode : BaseNode, ISerializationCallbackReceiver
         "動画のループと音声のループは別々です。映像のクロスフェードと音声のフェードも別々です。\n" +
         "Next の秒数は、Video Clip があるときはその長さ、無いときは Audio Clip の長さが基準です。0 は開始と同時、負の値か長さ以上は終端です。\n" +
         "タイトル右のボタンでノード全体、設定ボタンで項目だけ、折りたたみと展開ができます。\n" +
-        "透過のある Video Clip は、アルファを画面に出します。透けた部分には、その後ろの表示が見えます。";
+        "透過のある Video Clip は、アルファを画面に出します。透けた部分には、その後ろの表示が見えます。\n" +
+        "Video 変数、Audio 変数を選ぶと、その変数のクリップを再生します。未選択のときは、ノードに置いたクリップを再生します。";
 
     public const string OutputTimingTooltip =
         "0: 開始と同時に Next へ。負の値、または基準の長さ以上: 終端。基準は Video Clip の長さ。Video Clip が無いときは Audio Clip の長さ。";
@@ -24,6 +25,12 @@ public class PlayClipNode : BaseNode, ISerializationCallbackReceiver
 
     public VideoClip clip;
     public AudioClip audioClip;
+
+    [Tooltip("選ぶと、この変数の Video Clip を再生します。未選択なら Video Clip 欄です。")]
+    public string videoVariable = "";
+
+    [Tooltip("選ぶと、この変数の Audio Clip を再生します。未選択なら Audio Clip 欄です。")]
+    public string audioVariable = "";
 
     [Tooltip("この Audio Clip をどの音量スライダーで鳴らすか")]
     public StoryAudioBus audioBus = StoryAudioBus.BGM;
@@ -63,29 +70,60 @@ public class PlayClipNode : BaseNode, ISerializationCallbackReceiver
     /// <summary>
     /// Next の基準が動画の長さなら true。動画が無いときは音声の長さです。
     /// </summary>
-    public bool UsesVideoForTiming => clip != null;
+    public bool UsesVideoForTiming => ResolveVideo() != null;
 
     /// <summary>
     /// Next の基準にする長さ（秒）。動画があればその長さ、無ければ音声の長さ。
     /// </summary>
     public float GetTimingLength()
     {
-        if (clip != null) return Mathf.Max(0f, (float)clip.length);
-        if (audioClip != null) return Mathf.Max(0f, audioClip.length);
+        VideoClip video = ResolveVideo();
+        if (video != null) return Mathf.Max(0f, (float)video.length);
+        AudioClip audio = ResolveAudio();
+        if (audio != null) return Mathf.Max(0f, audio.length);
         return 0f;
+    }
+
+    /// <summary>
+    /// 変数が選ばれていればその Video Clip。未選択ならノードの Video Clip。
+    /// </summary>
+    public VideoClip ResolveVideo()
+    {
+        if (!string.IsNullOrWhiteSpace(videoVariable))
+        {
+            return GameManager.GetVideoClip(videoVariable.Trim());
+        }
+
+        return clip;
+    }
+
+    /// <summary>
+    /// 変数が選ばれていればその Audio Clip。未選択ならノードの Audio Clip。
+    /// </summary>
+    public AudioClip ResolveAudio()
+    {
+        if (!string.IsNullOrWhiteSpace(audioVariable))
+        {
+            return GameManager.GetAudioClip(audioVariable.Trim());
+        }
+
+        return audioClip;
     }
 
     public override void Execute(StoryPlayer player)
     {
         if (player == null) return;
-        if (clip == null && audioClip == null) return;
+
+        VideoClip video = ResolveVideo();
+        AudioClip audio = ResolveAudio();
+        if (video == null && audio == null) return;
 
         player.PlayVideo(
-            clip,
+            video,
             this,
             isLooping,
             portOutputTime,
-            audioClip,
+            audio,
             crossFadeDuration,
             audioBus,
             separateAudioLoop: true,

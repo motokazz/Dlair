@@ -13,9 +13,49 @@ using UnityEditor;
 [System.Serializable]
 public class StoryVisitButtonEntry
 {
+    /// <summary>
+    /// 対象が Start ノードであること。Start ノードの GUID は保存しない。
+    /// </summary>
+    public const string StartTarget = "Start";
+
     public StoryGraph visitGraph;
     public string visitLabelGuid;
     [TextArea(2, 4)] public string message;
+
+    public static bool IsStartTarget(string labelId)
+    {
+        return labelId == StartTarget;
+    }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 対象ラベルの候補。グラフに並んでいる Label だけを出す。
+    /// </summary>
+    public static void CollectLabelChoices(StoryGraph graph, List<string> ids, List<string> labels)
+    {
+        ids.Clear();
+        labels.Clear();
+        if (graph == null || graph.nodes == null) return;
+
+        HashSet<string> used = new HashSet<string>();
+        for (int i = 0; i < graph.nodes.Count; i++)
+        {
+            if (graph.nodes[i] is not LabelNode label) continue;
+            if (string.IsNullOrEmpty(label.guid) || ids.Contains(label.guid)) continue;
+
+            string display = label.GetDisplayName();
+            if (!used.Add(display))
+            {
+                string suffix = label.guid.Length > 4 ? label.guid.Substring(0, 4) : label.guid;
+                display = display + " " + suffix;
+                used.Add(display);
+            }
+
+            ids.Add(label.guid);
+            labels.Add(display);
+        }
+    }
+#endif
 }
 
 /// <summary>
@@ -29,7 +69,7 @@ public class StoryVisitButtonPanel : MonoBehaviour
 {
     public const string Summary =
         "再生記録のリストを登録すると、このオブジェクトの子にボタンを揃えます。\n" +
-        "1件がボタン1つです。その再生記録が、ボタンの1段階目です。StoryGraph と Label が空の行はボタンにしません。\n" +
+        "1件がボタン1つです。その再生記録が、ボタンの1段階目です。StoryGraph と対象が空の行はボタンにしません。\n" +
         "段階の働きは固定です。0段目は今の Lock のままです。1段目以降は、カーソルを重ねるとリストの文章をバルーンで出します。2段目（全部 Unlock）で Goto します。バルーンは 2段目でも残します。\n" +
         "文章は行ごとに書きます。バルーンのフォント、色、余白、位置はすべてのボタンで共通です。\n" +
         "追加の段階、画像、マテリアル、アニメーション、条件の反転も共通です。\n" +
@@ -245,7 +285,11 @@ public class StoryVisitButtonPanel : MonoBehaviour
     private string NameFor(StoryVisitButtonEntry entry)
     {
         string labelName = "Visit";
-        if (entry != null && entry.visitGraph != null)
+        if (entry != null && StoryVisitButtonEntry.IsStartTarget(entry.visitLabelGuid))
+        {
+            labelName = StoryVisitButtonEntry.StartTarget;
+        }
+        else if (entry != null && entry.visitGraph != null)
         {
             LabelNode label = entry.visitGraph.FindLabel(entry.visitLabelGuid);
             if (label != null && !string.IsNullOrWhiteSpace(label.GetDisplayName()))
@@ -566,6 +610,8 @@ public class StoryVisitHoverBalloon : MonoBehaviour, IPointerEnterHandler, IPoin
 [CustomEditor(typeof(StoryVisitButtonPanel))]
 public class StoryVisitButtonPanelEditor : Editor
 {
+    private string fillResult;
+
     public override void OnInspectorGUI()
     {
         serializedObject.Update();
@@ -582,6 +628,13 @@ public class StoryVisitButtonPanelEditor : Editor
     {
         SerializedProperty visits = serializedObject.FindProperty("visits");
         EditorGUILayout.LabelField("1段階目（再生記録）", EditorStyles.boldLabel);
+        GUIContent fillLabel = new GUIContent(
+            "欠損ラベルを補完",
+            "対象ラベルが欠損の行へ、その StoryGraph で最初に登場する Label を入れます。未選択は変えません。");
+        if (GUILayout.Button(fillLabel))
+            FillMissingTargetLabels();
+        if (!string.IsNullOrEmpty(fillResult))
+            EditorGUILayout.HelpBox(fillResult, MessageType.Info);
 
         for (int i = 0; i < visits.arraySize; i++)
         {
@@ -739,31 +792,113 @@ public class StoryVisitButtonPanelEditor : Editor
         DrawChoicePopup(new GUIContent("対象変数"), keyProperty, keys, labels);
     }
 
+    private void FillMissingTargetLabels()
+    {
+        Dictionary<StoryGraph, string> firstLabel = new Dictionary<StoryGraph, string>();
+        int filled = 0;
+        int skipped = 0;
+        FillVisitList(serializedObject.FindProperty("visits"), firstLabel, ref filled, ref skipped);
+        FillVisitStages(serializedObject.FindProperty("extraStages"), firstLabel, ref filled, ref skipped);
+
+        if (filled == 0 && skipped == 0)
+        {
+            fillResult = "欠損の対象ラベルはありません。";
+            return;
+        }
+
+        fillResult = filled + " 件を補完しました。";
+        if (skipped > 0)
+            fillResult += skipped + " 件は Label が無いため、そのままです。";
+    }
+
+    private static void FillVisitList(SerializedProperty visits, Dictionary<StoryGraph, string> firstLabel, ref int filled, ref int skipped)
+    {
+        if (visits == null || !visits.isArray) return;
+        for (int i = 0; i < visits.arraySize; i++)
+        {
+            SerializedProperty entry = visits.GetArrayElementAtIndex(i);
+            TryFillMissingLabel(
+                entry.FindPropertyRelative("visitGraph"),
+                entry.FindPropertyRelative("visitLabelGuid"),
+                firstLabel,
+                ref filled,
+                ref skipped);
+        }
+    }
+
+    private static void FillVisitStages(SerializedProperty stages, Dictionary<StoryGraph, string> firstLabel, ref int filled, ref int skipped)
+    {
+        if (stages == null || !stages.isArray) return;
+        for (int i = 0; i < stages.arraySize; i++)
+        {
+            SerializedProperty stage = stages.GetArrayElementAtIndex(i);
+            SerializedProperty source = stage.FindPropertyRelative("source");
+            if (source == null || source.enumValueIndex != (int)StoryLockSource.Visit) continue;
+            TryFillMissingLabel(
+                stage.FindPropertyRelative("visitGraph"),
+                stage.FindPropertyRelative("visitLabelGuid"),
+                firstLabel,
+                ref filled,
+                ref skipped);
+        }
+    }
+
+    private static void TryFillMissingLabel(
+        SerializedProperty graphProperty,
+        SerializedProperty guidProperty,
+        Dictionary<StoryGraph, string> firstLabel,
+        ref int filled,
+        ref int skipped)
+    {
+        if (graphProperty == null || guidProperty == null) return;
+        StoryGraph graph = graphProperty.objectReferenceValue as StoryGraph;
+        string current = guidProperty.stringValue ?? "";
+        if (!IsMissingLabel(graph, current)) return;
+
+        if (!firstLabel.TryGetValue(graph, out string labelGuid))
+        {
+            labelGuid = FindFirstLabelGuid(graph);
+            firstLabel.Add(graph, labelGuid);
+        }
+
+        if (string.IsNullOrEmpty(labelGuid))
+        {
+            skipped++;
+            return;
+        }
+
+        guidProperty.stringValue = labelGuid;
+        filled++;
+    }
+
+    private static bool IsMissingLabel(StoryGraph graph, string labelId)
+    {
+        if (graph == null || string.IsNullOrEmpty(labelId)) return false;
+        return graph.FindLabel(labelId) == null;
+    }
+
+    /// <summary>
+    /// グラフのノード順で、最初に登場する Label の GUID。
+    /// </summary>
+    private static string FindFirstLabelGuid(StoryGraph graph)
+    {
+        if (graph == null || graph.nodes == null) return null;
+        for (int i = 0; i < graph.nodes.Count; i++)
+        {
+            if (graph.nodes[i] is LabelNode label && !string.IsNullOrEmpty(label.guid))
+                return label.guid;
+        }
+
+        return null;
+    }
+
     private void DrawVisitLabelPopup(SerializedProperty graphProperty, SerializedProperty guidProperty)
     {
         StoryGraph graph = graphProperty != null ? graphProperty.objectReferenceValue as StoryGraph : null;
         string current = guidProperty.stringValue ?? "";
         List<string> guids = new List<string>();
         List<string> labels = new List<string>();
-        if (graph != null && graph.nodes != null)
-        {
-            HashSet<string> used = new HashSet<string>();
-            for (int i = 0; i < graph.nodes.Count; i++)
-            {
-                if (graph.nodes[i] is not LabelNode label) continue;
-                if (string.IsNullOrEmpty(label.guid) || guids.Contains(label.guid)) continue;
-                string display = label.GetDisplayName();
-                if (!used.Add(display))
-                {
-                    string suffix = label.guid.Length > 4 ? label.guid.Substring(0, 4) : label.guid;
-                    display = display + " " + suffix;
-                    used.Add(display);
-                }
-
-                guids.Add(label.guid);
-                labels.Add(display);
-            }
-        }
+        StoryVisitButtonEntry.CollectLabelChoices(graph, guids, labels);
 
         if (guids.Count == 0)
         {
@@ -783,7 +918,7 @@ public class StoryVisitButtonPanelEditor : Editor
             labels.Insert(0, "(欠損) " + shortGuid);
         }
 
-        DrawChoicePopup(new GUIContent("対象ラベル"), guidProperty, guids, labels);
+        DrawChoicePopup(new GUIContent("対象ラベル", "この StoryGraph にある Label。"), guidProperty, guids, labels);
     }
 
     private static void DrawChoicePopup(GUIContent label, SerializedProperty valueProperty, List<string> values, List<string> labels)

@@ -12,6 +12,7 @@ public class ChoiceNode : BaseNode, ISerializationCallbackReceiver
         "UI Prefab の中にあるボタンのうち、選択肢に取得した名前と同じものだけを分岐にします。クリックすると、その名前の出力へ進みます。\n" +
         "取得したボタンに付いているコンポーネントと、プレハブに設定したクリックは残します。\n" +
         "取得していないボタンは Choice では扱いません。プレハブに設定したクリックのまま動きます。\n" +
+        "親は Canvas 直下、UI Parent、UIParent1 以降から選びます。未設定の親は Canvas 直下です。\n" +
         "タイトル右のボタンでノード全体、設定ボタンで項目だけ、折りたたみと展開ができます。";
 
     [Header("表示するUIプレハブ")]
@@ -23,8 +24,14 @@ public class ChoiceNode : BaseNode, ISerializationCallbackReceiver
     [Header("オプション")]
     public bool autoDestroyUI = true;
 
-    [Tooltip("オン: StoryPlayer の UI Parent 配下 / オフ: Canvas 直下。Parent 未指定時はどちらも Canvas 直下")]
+    [HideInInspector]
     public bool parentToUiParent = true;
+
+    [HideInInspector]
+    public int parentSlot;
+
+    [SerializeField, HideInInspector]
+    private bool parentSlotReady;
 
     [Tooltip("オンでノード全体を展開、オフで折りたたみ。")]
     public bool nodeExpanded = true;
@@ -46,6 +53,26 @@ public class ChoiceNode : BaseNode, ISerializationCallbackReceiver
         return Summary;
     }
 
+    /// <summary>
+    /// 表示先。-1 は Canvas 直下、0 は UI Parent、1 以降は UIParent1...。
+    /// 古いオン／オフだけがあるノードは、その設定を使います。
+    /// </summary>
+    public int GetParentSlot()
+    {
+        if (parentSlotReady) return parentSlot;
+        return parentToUiParent ? 0 : -1;
+    }
+
+    /// <summary>
+    /// 親を選び、以後はこの番号を使います。
+    /// </summary>
+    public void SetParentSlot(int slot)
+    {
+        parentSlot = slot;
+        parentSlotReady = true;
+        parentToUiParent = slot == 0;
+    }
+
     public override void Execute(StoryPlayer player)
     {
         Debug.Log($"【Choice Node】入力待ちUIを表示します: {(branchUIPrefab != null ? branchUIPrefab.name : "None")}");
@@ -56,7 +83,7 @@ public class ChoiceNode : BaseNode, ISerializationCallbackReceiver
             return;
         }
 
-        Transform parent = player.GetUIParent(parentToUiParent);
+        Transform parent = player.GetUIParentSlot(GetParentSlot());
         if (parent == null)
         {
             Debug.LogError("【Choice Node】UIを表示するための親 / Canvas がシーン内に見つかりません！");
