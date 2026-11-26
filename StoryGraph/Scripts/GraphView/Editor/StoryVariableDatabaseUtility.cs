@@ -194,6 +194,12 @@ public static class StoryVariableDatabaseUtility
                 return definition.defaultBoolValue ? "true" : "false";
             case StoryVariableType.Float:
                 return definition.defaultFloatValue.ToString(CultureInfo.InvariantCulture);
+            case StoryVariableType.VideoClip:
+                return definition.defaultVideoClip != null ? definition.defaultVideoClip.name : "";
+            case StoryVariableType.AudioClip:
+                return definition.defaultAudioClip != null ? definition.defaultAudioClip.name : "";
+            case StoryVariableType.Heading:
+                return "";
             default:
                 return definition.defaultStringValue ?? "";
         }
@@ -255,6 +261,8 @@ public static class StoryVariableDatabaseUtility
                 {
                     result.warnings.Add($"{line} 行目: 初期値「{raw}」を Float として読めないので 0 にします。");
                 }
+                break;
+            case StoryVariableType.Heading:
                 break;
             default:
                 definition.defaultStringValue = raw;
@@ -348,6 +356,11 @@ public static class StoryVariableDatabaseUtility
             case "text":
             case "文字列":
                 type = StoryVariableType.String;
+                return true;
+            case "heading":
+            case "header":
+            case "見出し":
+                type = StoryVariableType.Heading;
                 return true;
         }
 
@@ -615,7 +628,9 @@ public static class StoryVariableDatabaseUtility
                 defaultIntValue = source.defaultIntValue,
                 defaultBoolValue = source.defaultBoolValue,
                 defaultFloatValue = source.defaultFloatValue,
-                defaultStringValue = source.defaultStringValue ?? ""
+                defaultStringValue = source.defaultStringValue ?? "",
+                defaultVideoClip = source.defaultVideoClip,
+                defaultAudioClip = source.defaultAudioClip
             });
         }
 

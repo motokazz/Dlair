@@ -14,6 +14,7 @@ public static class AudioOptions
 
     static AudioOptionsCatalog catalog;
     static readonly HashSet<string> reportedMissingParameters = new HashSet<string>();
+    static bool mixerReady;
 
     public static AudioOptionsCatalog Catalog
     {
@@ -35,7 +36,6 @@ public static class AudioOptions
     {
         GameSettings.Load();
         MigrateLegacyPlayerPrefs();
-        ApplyAll();
         var host = new GameObject("AudioOptionsApplier");
         host.hideFlags = HideFlags.HideAndDontSave;
         Object.DontDestroyOnLoad(host);
@@ -130,8 +130,16 @@ public static class AudioOptions
         return Mathf.Pow(10f, db / 20f);
     }
 
+    internal static void MarkMixerReady()
+    {
+        mixerReady = true;
+    }
+
     static void Apply(AudioOptionEntry entry, float userLinear)
     {
+        if (!mixerReady)
+            return;
+
         AudioOptionsCatalog current = Catalog;
         if (current == null || current.mixer == null)
             return;
@@ -211,13 +219,20 @@ public static class AudioOptions
 }
 
 /// <summary>
-/// シーン開始直後、ミキサーが音量を戻す間、保存した音量を数フレーム再適用する。
+/// ミキサーの準備が終わってから音量を書く。準備前の SetFloat は、ビルドで公開パラメータを -80 dB のままにする。
+/// 書き込んだあとも、起動直後にミキサーが音量を戻す間は数フレーム再適用する。
 /// </summary>
 sealed class AudioOptionsApplier : MonoBehaviour
 {
     const int ApplyFrames = 30;
 
     int frames;
+
+    void Start()
+    {
+        AudioOptions.MarkMixerReady();
+        AudioOptions.ApplyAll();
+    }
 
     void LateUpdate()
     {

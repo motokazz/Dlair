@@ -1,0 +1,24 @@
+目的: ConditionMulti の再生記録で、欠損しているラベルをその StoryGraph の最初の Label にする
+
+済:
+- ConditionMulti の設定に「欠損ラベルを補完」を付けた
+- 再生記録の行だけを見る。StoryGraph があり、ラベル GUID がそのグラフの Label に無いとき補完する
+- 補完する Label は、その StoryGraph のノード順で最初に登場する Label
+- 空の未選択は変えない。値 Start は欠損として補完する
+- 説明文から、ラベルに Start を選ぶ案内を外した
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/ConditionMultiNode.cs
+
+決めたこと:
+- ボタンはこの ConditionMulti ノードの条件だけを見る
+- 変数の行は見ない
+- 空の未選択は変えない
+- 補完する Label は、StoryGraph のノード順で最初に登場する Label
+
+触らないこと:
+- 既存の .meta
+- 触るファイル以外

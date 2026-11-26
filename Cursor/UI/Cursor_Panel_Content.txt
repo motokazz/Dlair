@@ -1,0 +1,22 @@
+目的: 操作説明と同じ形で、ゲーム内容を短く説明する画面を作る
+
+済:
+- Panel_Controls と同じ並びで Panel_Content を作った
+- キャラクター、はじめ方、続き、選択肢、来た場面を1行ずつ書いた
+- vp2 の Canvas_Option の子として、操作説明の上に出した
+
+未:
+- オプションの一覧からこの画面を開く
+
+触るファイル:
+- Assets/RawData/Option/Panel_Content.prefab
+- Assets/Dlair/VideoPlayer/vp2.unity
+
+決めたこと:
+- 見た目は操作説明に合わせ、文章だけ変える
+- プレイヤー向けに短くする。変数名や内部の判定は書かない
+- オプションのボタン接続はまだしない
+
+触らないこと:
+- Panel_Controls
+- Option_ingame の中身、オプションのボタン、スクリプト

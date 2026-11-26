@@ -238,6 +238,15 @@ public static class StoryGraphCloneUtility
                 EditorUtility.SetDirty(subGraphNode);
             }
 
+            if (node is SubGraphInputNode inputNode
+                && inputNode.subGraph != null
+                && originalToCopy.TryGetValue(inputNode.subGraph, out StoryGraph mappedInput)
+                && mappedInput != inputNode.subGraph)
+            {
+                inputNode.subGraph = mappedInput;
+                EditorUtility.SetDirty(inputNode);
+            }
+
             if (node is GotoNode gotoNode
                 && gotoNode.targetGraph != null
                 && originalToCopy.TryGetValue(gotoNode.targetGraph, out StoryGraph mappedGoto)

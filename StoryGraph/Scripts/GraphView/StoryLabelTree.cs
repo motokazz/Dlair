@@ -16,7 +16,7 @@ public class StoryLabelTreeNode
 }
 
 /// <summary>
-/// ルートの StoryGraph から SubGraph と Goto を辿り、ラベルの木を作る。
+/// ルートの StoryGraph から SubGraph、SubGraph Input、Goto を辿り、ラベルの木を作る。
 /// </summary>
 public static class StoryLabelTree
 {
@@ -84,10 +84,9 @@ public static class StoryLabelTree
                 if (current is not GotoNode gotoNode) continue;
                 ResolveGoto(graph, gotoNode, out dest, out _);
             }
-            else
+            else if (!StoryGraph.TryGetNestedGraph(current, out dest))
             {
-                if (current is not SubGraphNode subGraphNode) continue;
-                dest = subGraphNode.subGraph;
+                continue;
             }
 
             if (dest == null || dest == graph || visited.Contains(dest)) continue;

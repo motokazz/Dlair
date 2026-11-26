@@ -1,0 +1,33 @@
+目的: Choiceノードと同等の機能で複数のUIを同時に表示出来るようにする
+済:
+- StoryPlayer に UIParent1 からの可変配列と取得を追加する
+- Choice Node Multi を追加し、複数 UI を同時に出して UI ごとに分岐する
+- 作成メニュー、ノード設定、ヘルプ、出力ポート、タイトルを足す
+- Choice ノードにも Canvas直下、UI Parent、UIParent1 以降の親選択を付けた
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/UI/ChoiceNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/UI/ChoiceNodeMulti.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/StoryPlayer.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryPlayerEditor.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphView.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphNodeNaming.cs
+
+決めたこと:
+- Summaryを明記する
+- ノードのヘルプ
+- Choiceノードと同等の機能で複数のUIを同時に表示出来るようにしたい
+- StoryPlayerにUIParentの他に設定できるParentを作成して選択できるようにしたい
+- 新しいParentはUIParent１から始まる名前にして配列で設定し数量を可変にする
+- 新しい Choice Node Multi を追加する。Choice の分岐はそのままにする
+- Choice の親も Canvas直下、UI Parent、UIParent1 以降から選ぶ。古いオン／オフのノードは、その設定のまま動く
+- UIごとにプレハブ、親、選択肢を持つ。出力ポートは UI ごとに分ける
+- ポート名は UI番号:選択肢名。番号はその UI に固定し、他の UI を消しても変えない
+- 親は Canvas直下、UI Parent、UIParent1 以降から選ぶ。未設定の親は Canvas 直下
+- クリック時は、そのノードが出した UI をまとめて消し、選んだポートへ進む（選択後に消すがオンのとき）
+
+触らないこと:
+- Assets/Dlair/StoryGraph以外の場所にあるスクリプト

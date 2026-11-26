@@ -1,0 +1,38 @@
+目的: 複雑な計算を VariableOperation の連鎖にせず、手書きの計算式を実行する CustomCNode を追加する
+
+済:
+- CustomCNode を追加し、ノードに書いた計算式を実行時に評価して代入する
+- グラフの作成メニュー Create/Variable に出す
+- ノード上で計算式を編集できるようにする
+- ノードタイトルに内容が分かる表示を出す
+- 対象スクリプトに Summary を付ける
+- 代入先を Float 変数にした。式は小数のまま計算する
+- 変数宣言ノードを通過したとき、その宣言値を入れる。同じ名前が先に別の値でも、このノードの設定で計算する
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/CustomCNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphView.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphNodeNaming.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/VariableDeclareNode.cs
+
+決めたこと:
+- ノード名は CustomCNode
+- 計算が複雑になると VariableOperation が猥雑になる。計算式を直接書いて、そのノードの実行時に実行する
+- 計算式だけ書ける。if や複数文は書かない
+- 結果は選んだ Float 変数へ代入する
+- 式は C# の小数演算。+ - * / %、括弧、小数リテラル、変数名。割り算は切り捨てない
+- 式中の変数は数値として読む。Float、Int、Bool。未設定は 0
+- 変数宣言ノードを通過したときは、そのノードの宣言値を入れる。グラフ開始時の一括反映は、まだ値が無い変数だけ
+- データベースにある同名変数は、宣言ノードを通過しても上書きしない
+- ゼロ除算や構文エラーは警告を出して代入せず Next へ進む
+- 作成場所は Variable Operation と同じ Create/Variable
+- 入力は1つ。実行後は Next へ進む
+- VariableOperation は残す
+- スクリプトには Summary をつける
+
+触らないこと:
+- VariableOperationNode の演算仕様
+- Assets/Dlair/StoryGraph/Scripts/GraphView/ 以外

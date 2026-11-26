@@ -202,6 +202,11 @@ public class AudioOptionsPanel : MonoBehaviour
         layout.minWidth = 120f;
         layout.preferredHeight = 24f;
 
+        Image hitArea = sliderObject.AddComponent<Image>();
+        hitArea.sprite = WhiteSprite;
+        hitArea.color = new Color(1f, 1f, 1f, 0f);
+        hitArea.raycastTarget = true;
+
         Slider slider = sliderObject.AddComponent<Slider>();
         slider.minValue = 0f;
         slider.maxValue = 1f;
@@ -212,7 +217,7 @@ public class AudioOptionsPanel : MonoBehaviour
         backgroundImage.sprite = WhiteSprite;
         backgroundImage.type = Image.Type.Simple;
         backgroundImage.color = new Color(1f, 1f, 1f, 0.18f);
-        backgroundImage.raycastTarget = false;
+        backgroundImage.raycastTarget = true;
 
         RectTransform fillArea = CreateStretch("Fill Area", sliderObject.transform, Vector2.zero, Vector2.one, new Vector2(5f, 0f), new Vector2(-15f, 0f));
         RectTransform fill = CreateStretch("Fill", fillArea, Vector2.zero, Vector2.one, new Vector2(-5f, 0f), new Vector2(5f, 0f));

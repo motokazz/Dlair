@@ -1163,8 +1163,8 @@ public class UiAdjustDebugWindow : EditorWindow
         {
             BaseNode node = graph.nodes[i];
             ConsiderNode(node, clone, prefabName, matches, ref instanceMatch);
-            if (node is SubGraphNode subGraph)
-                CollectGraph(subGraph.subGraph, visited, clone, prefabName, matches, ref instanceMatch);
+            if (StoryGraph.TryGetNestedGraph(node, out StoryGraph nested))
+                CollectGraph(nested, visited, clone, prefabName, matches, ref instanceMatch);
             else if (node is GotoNode gotoNode)
                 CollectGraph(gotoNode.targetGraph, visited, clone, prefabName, matches, ref instanceMatch);
             else if (node is ConditionMultiNode condition && condition.conditions != null)

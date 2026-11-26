@@ -13,6 +13,9 @@ public class PlayImageNode : BaseNode
 
     public AudioClip audioClip;
 
+    [Tooltip("選ぶと、この変数の Audio Clip を再生します。未選択なら Audio Clip 欄です。")]
+    public string audioVariable = "";
+
     [Tooltip("この Audio Clip をどの音量スライダーで鳴らすか")]
     public StoryAudioBus audioBus = StoryAudioBus.BGM;
     public float crossFadeDuration = 1.0f;
@@ -25,7 +28,20 @@ public class PlayImageNode : BaseNode
     {
         if (image != null)
         {
-            player.PlayImage(image, duration, audioClip, isLooping, crossFadeDuration, this, portOutputTime, audioBus);
+            player.PlayImage(image, duration, ResolveAudio(), isLooping, crossFadeDuration, this, portOutputTime, audioBus);
         }
+    }
+
+    /// <summary>
+    /// 変数が選ばれていればその Audio Clip。未選択ならノードの Audio Clip。
+    /// </summary>
+    public AudioClip ResolveAudio()
+    {
+        if (!string.IsNullOrWhiteSpace(audioVariable))
+        {
+            return GameManager.GetAudioClip(audioVariable.Trim());
+        }
+
+        return audioClip;
     }
 }

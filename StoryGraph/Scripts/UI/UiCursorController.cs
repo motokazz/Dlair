@@ -141,6 +141,8 @@ public class UiCursorController : MonoBehaviour
 
             Selectable selectable = hit.GetComponentInParent<Selectable>();
             if (selectable == null || !selectable.IsActive() || !selectable.IsInteractable()) continue;
+            // スライダーやスクロールバーは手前の操作対象。奥のボタンの属性へは切り替えない。
+            if (selectable is Slider || selectable is Scrollbar) return false;
             if (!includeOtherSelectables && selectable is not Button) continue;
 
             UiCursorAttribute attribute = selectable.GetComponent<UiCursorAttribute>();

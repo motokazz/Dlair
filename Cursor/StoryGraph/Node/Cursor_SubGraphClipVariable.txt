@@ -1,0 +1,39 @@
+目的: サブグラフで VideoClip と AudioClip を、変数と同じ形で使えるようにする。
+
+済:
+- 変数の型に VideoClip と AudioClip を追加した
+- 変数宣言の初期値と、SubGraph Input の入力値にクリップを設定できる
+- 入る直前に、そのクリップを変数へ書く
+- Play Clip は Video 変数と Audio 変数を選べる。未選択ならノードのクリップを再生する
+- Play Image は Audio 変数を選べる。未選択ならノードの Audio Clip を再生する
+- クリップ変数はセーブしない
+- 見出し型を追加し、宣言順のまま SubGraph Input に出す。左のドラッグで並べ替えられる
+
+未:
+
+触るファイル:
+- Assets/Dlair/StoryGraph/Scripts/Core/StoryVariableDatabase.cs
+- Assets/Dlair/StoryGraph/Scripts/Core/GameManager.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Variable/VariableDeclareNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/SubGraphInputNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Media/PlayClipNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Media/PlayImageNode.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryNodeUI.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryVariableCatalog.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryVariableDatabaseUtility.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Editor/StoryGraphNodeNaming.cs
+
+決めたこと:
+- 変数宣言で VideoClip と AudioClip を宣言し、SubGraph Input でクリップを渡す
+- 再生ノードは変数を選ぶと、その変数のクリップを使う。未選択なら今まで通りノードのクリップを使う
+- 変数を選んでいるときは、クリップが空でもノードのクリップには戻さない
+- クリップ変数はセーブしない。戻ったあとも、実行中の値は残る
+- 数値や Bool の変数一覧には、クリップ変数を出さない
+- 並びは変数宣言の順。見出し型は区切りだけで値を持たない
+- SubGraph Input と変数宣言の左をドラッグすると、その宣言順を並べ替えられる
+
+触らないこと:
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/SubGraphNode.cs
+- SubGraph の入り方と戻り方（EnterSubGraph / ExitSubGraph）の挙動
+- グラフをドロップして Sub Graph ノードを作る処理
+- Assets/Dlair/StoryGraph 以外

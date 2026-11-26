@@ -18,6 +18,9 @@ public class StoryPlayer : MonoBehaviour
     [Tooltip("Choice / Text / Variable Text / Spawn(UI) の生成先。空なら Canvas 直下")]
     public RectTransform uiParent;
 
+    [Tooltip("Choice Node Multi 用の追加の親。要素0が UIParent1。数はインスペクタで増減する")]
+    public RectTransform[] uiParents;
+
     [Header("Debug / Collection")]
     [Tooltip("指定した行先ラベル名から開始します。空なら Start ノードから開始します。")]
     public string startFromLabel;
@@ -52,6 +55,7 @@ public class StoryPlayer : MonoBehaviour
         }
 
         currentNode = node;
+        StoryLocalVariables.Activate(ActiveGraph);
         node.Execute(this);
     }
 
@@ -206,6 +210,36 @@ public class StoryPlayer : MonoBehaviour
     public bool JumpFromOutside(string labelName, StoryGraph searchRoot = null)
     {
         return JumpFromOutside(labelName, searchRoot, true);
+    }
+
+    /// <summary>
+    /// 指定したグラフの Start ノードから再生する。Start ノードの GUID は見ない。
+    /// </summary>
+    public bool JumpToStart(StoryGraph destGraph)
+    {
+        BaseNode startNode = FindStartNode(destGraph);
+        if (startNode == null) return false;
+
+        gotoDepth = 0;
+        graphStack.Clear();
+        BeginGraphJump();
+        EnterGraphAtNode(destGraph, startNode, null);
+        return true;
+    }
+
+    /// <summary>
+    /// そのグラフ直下の最初の Start ノード。GUID では探さない。
+    /// </summary>
+    public static BaseNode FindStartNode(StoryGraph graph)
+    {
+        if (graph?.nodes == null) return null;
+        for (int i = 0; i < graph.nodes.Count; i++)
+        {
+            if (graph.nodes[i] is StartNode start)
+                return start;
+        }
+
+        return null;
     }
 
     private bool JumpFromOutside(string labelName, StoryGraph searchRoot, bool resetPlayback)
@@ -483,9 +517,9 @@ public class StoryPlayer : MonoBehaviour
 
         for (int i = 0; i < owner.nodes.Count; i++)
         {
-            if (owner.nodes[i] is SubGraphNode subGraphNode && subGraphNode.subGraph == nested)
+            if (StoryGraph.TryGetNestedGraph(owner.nodes[i], out StoryGraph called) && called == nested)
             {
-                return subGraphNode;
+                return owner.nodes[i];
             }
         }
 
@@ -517,6 +551,24 @@ public class StoryPlayer : MonoBehaviour
         return canvas != null ? canvas.transform : null;
     }
 
+    /// <summary>
+    /// Choice Node Multi の親。-1 は Canvas 直下、0 は UI Parent、1 以降は UIParent1...。未設定は Canvas 直下。
+    /// </summary>
+    public Transform GetUIParentSlot(int slot)
+    {
+        if (slot == 0 && uiParent != null) return uiParent;
+
+        int index = slot - 1;
+        if (slot > 0 && uiParents != null && index < uiParents.Length && uiParents[index] != null)
+            return uiParents[index];
+
+        if (slot > 0)
+            Debug.LogWarning($"【StoryPlayer】UIParent{slot} が未設定のため Canvas 直下に出します。");
+
+        Canvas canvas = GetUICanvas();
+        return canvas != null ? canvas.transform : null;
+    }
+
     public Canvas GetUICanvas()
     {
         if (uiCanvas != null) return uiCanvas;
@@ -524,6 +576,15 @@ public class StoryPlayer : MonoBehaviour
         {
             uiCanvas = uiParent.GetComponentInParent<Canvas>();
             if (uiCanvas != null) return uiCanvas;
+        }
+        if (uiParents != null)
+        {
+            for (int i = 0; i < uiParents.Length; i++)
+            {
+                if (uiParents[i] == null) continue;
+                uiCanvas = uiParents[i].GetComponentInParent<Canvas>();
+                if (uiCanvas != null) return uiCanvas;
+            }
         }
 #if UNITY_2023_1_OR_NEWER
         uiCanvas = Object.FindFirstObjectByType<Canvas>();

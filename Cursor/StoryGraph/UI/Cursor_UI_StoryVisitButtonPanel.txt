@@ -10,6 +10,12 @@
 - メッセージ文はリストの行に書く。バルーンの見た目と位置は共通
 - 子ボタンの生成はゲーム実行中だけにした。プレハブ資産へは追加しない
 - バルーンの地は実行時の白い画像にした。Unity の内蔵 UISprite は読まない
+- 対象ラベルに Start を追加した。選ぶと Start ノードの GUID は保存せず、値は Start
+- Start の Goto は、そのグラフの Start ノードを種類で探してそこから始める
+- Start ノードに到達すると、グラフのアセット名と Start を再生記録に足す。GUID は書かない
+- Start の Unlock は、その再生記録があるとき。Label と同じくグラフ名と Start の組で見る
+- インスペクタの「欠損ラベルを補完」で、この Panel の欠損している対象ラベルへ、その StoryGraph で最初に登場する Label を入れるようにした
+- 対象ラベルの候補から Start を外した。値 Start は欠損として、最初の Label で補完する
 
 未:
 
@@ -18,6 +24,8 @@
 - Assets/Dlair/StoryGraph/Scripts/UI/StoryVisitButtonPanel.cs.meta
 - Assets/Dlair/StoryGraph/Scripts/UI/StoryVariableLockButton.cs
 - Assets/Dlair/StoryGraph/Scripts/UI/StoryGotoButton.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/StoryPlayer.cs
+- Assets/Dlair/StoryGraph/Scripts/GraphView/Nodes/Flow/StartNode.cs
 - Assets/RawData/Main/UI/prefabs/Char_Select.prefab
 
 決めたこと:
@@ -28,7 +36,12 @@
 - 直接の子で StoryVariableLockButton があるものを生成対象にする。それ以外の子は残す
 - 件数と内容がリストと一致するボタンは残す。足りなければ Spawn し、多ければ末尾から消す。違う内容はそのボタンへ書き直す
 - 新しく Spawn したボタンの名前は、Label の表示名にする
-- 押したときの行先は、その行の Label。別の行先は持たない
+- 押したときの行先は、その行の対象ラベル。別の行先は持たない
+- 対象ラベルの候補に Start は出さない。残っている値 Start は欠損として、最初の Label で補完する
+- Start の Goto は、指定した StoryGraph 直下の Start ノードを種類で探して、そこから始める
+- Start ノードに到達すると、再生中のグラフのアセット名と Start を再生記録に足す。Start ノードの GUID は記録しない
+- Start の Unlock は、その再生記録があるとき。Label と同じく、グラフ名と Start の組で見る
+- Label を選んだ行は、これまでどおり Label の GUID で探す
 - 段階の働きは固定。0段目（満たした数が 0）は今の Lock のまま。メッセージも Goto も無い
 - 1段目（満たした数が 1 以上）は、カーソルを重ねるとその行の文章をバルーンで出す。文章が空なら出さない
 - 2段目は今までどおり、全部 Unlock のときだけ押せ、押すと Goto する。バルーンは残す
@@ -36,9 +49,12 @@
 - バルーンの地は実行時に作る白い画像。Unity の内蔵スプライトは使わない
 - Goto のクリック登録は StoryVisitButtonPanel が行う。StoryGotoButton 単体は、これまでどおり自動では登録しない
 - ボタンの生成はゲーム実行中だけ行う。生成した子はプレハブ資産に書き戻さない
+- 「欠損ラベルを補完」はこの Panel の対象ラベルだけを見る。空の未選択は変えない
+- 補完する Label は、その StoryGraph のノード順で最初に登場する Label
+- 追加の段階で再生記録になっている行の対象ラベルも、同じ補完の対象にする
 
 触らないこと:
 - Button_rum/Panel 以外のボタン
-- StoryVariableLockButton の Lock 判定とアニメーションの意味
+- Label を選んだときの Lock 判定と、アニメーションの意味
 - StoryVariableLockButton を持たない子
 - 既存の .meta

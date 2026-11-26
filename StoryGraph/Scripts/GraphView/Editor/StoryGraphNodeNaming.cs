@@ -104,9 +104,17 @@ public static class StoryGraphNodeNaming
         {
             raw = declareNode.GetDisplayTitle();
         }
+        else if (node is LocalVariableDeclareNode localDeclareNode)
+        {
+            raw = localDeclareNode.GetDisplayTitle();
+        }
         else if (node is VariableOperationNode variableNode)
         {
             raw = variableNode.GetDisplayTitle();
+        }
+        else if (node is CustomCNode customCNode)
+        {
+            raw = customCNode.GetDisplayTitle();
         }
         else if (node is BoolOperationNode boolNode)
         {
@@ -114,7 +122,9 @@ public static class StoryGraphNodeNaming
         }
         else if (node is ConditionNode conditionNode)
         {
-            raw = conditionNode.GetDisplayTitle();
+            bool floatLiteral = StoryVariableCatalog.TryGetType(conditionNode.variableName, out StoryVariableType variableType)
+                && variableType == StoryVariableType.Float;
+            raw = conditionNode.GetDisplayTitle(floatLiteral);
         }
         else if (node is ConditionMultiNode conditionMultiNode)
         {
@@ -150,13 +160,27 @@ public static class StoryGraphNodeNaming
                 ? subGraphNode.subGraph.name
                 : "SubGraph";
         }
+        else if (node is SubGraphInputNode inputNode)
+        {
+            raw = inputNode.GetDisplayTitle();
+        }
         else if (node is PlayClipNode playClipNode)
         {
-            raw = FirstAssetName(playClipNode.clip, playClipNode.audioClip, "PlayClip");
+            raw = FirstAssetName(playClipNode.clip, playClipNode.audioClip, "");
+            if (string.IsNullOrEmpty(raw))
+            {
+                if (!string.IsNullOrWhiteSpace(playClipNode.videoVariable)) raw = playClipNode.videoVariable.Trim();
+                else if (!string.IsNullOrWhiteSpace(playClipNode.audioVariable)) raw = playClipNode.audioVariable.Trim();
+                else raw = "PlayClip";
+            }
         }
         else if (node is PlayImageNode playImageNode)
         {
             raw = FirstAssetName(playImageNode.image, playImageNode.audioClip, "PlayImage");
+        }
+        else if (node is ChoiceNodeMulti choiceMulti)
+        {
+            raw = choiceMulti.GetDisplayTitle();
         }
         else if (node is ChoiceNode choiceNode)
         {

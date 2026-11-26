@@ -87,6 +87,27 @@ public class StoryGraph : ScriptableObject
         return TryFindLabelByName(this, labelName, new HashSet<StoryGraph>(), out owner, out label);
     }
 
+    /// <summary>
+    /// このノードが直接入る StoryGraph。SubGraph と SubGraph Input が対象。
+    /// </summary>
+    public static bool TryGetNestedGraph(BaseNode node, out StoryGraph nested)
+    {
+        if (node is SubGraphNode subGraphNode)
+        {
+            nested = subGraphNode.subGraph;
+            return nested != null;
+        }
+
+        if (node is SubGraphInputNode inputNode)
+        {
+            nested = inputNode.subGraph;
+            return nested != null;
+        }
+
+        nested = null;
+        return false;
+    }
+
     private static bool TryFindLabel(StoryGraph current, string labelGuid, HashSet<StoryGraph> visited, out StoryGraph owner, out LabelNode label)
     {
         owner = null;
@@ -103,8 +124,8 @@ public class StoryGraph : ScriptableObject
         if (current.nodes == null) return false;
         for (int i = 0; i < current.nodes.Count; i++)
         {
-            if (current.nodes[i] is not SubGraphNode subGraphNode || subGraphNode.subGraph == null) continue;
-            if (TryFindLabel(subGraphNode.subGraph, labelGuid, visited, out owner, out label)) return true;
+            if (!TryGetNestedGraph(current.nodes[i], out StoryGraph nested)) continue;
+            if (TryFindLabel(nested, labelGuid, visited, out owner, out label)) return true;
         }
 
         return false;
@@ -126,8 +147,8 @@ public class StoryGraph : ScriptableObject
         if (current.nodes == null) return false;
         for (int i = 0; i < current.nodes.Count; i++)
         {
-            if (current.nodes[i] is not SubGraphNode subGraphNode || subGraphNode.subGraph == null) continue;
-            if (TryFindLabelByName(subGraphNode.subGraph, labelName, visited, out owner, out label)) return true;
+            if (!TryGetNestedGraph(current.nodes[i], out StoryGraph nested)) continue;
+            if (TryFindLabelByName(nested, labelName, visited, out owner, out label)) return true;
         }
 
         return false;
@@ -154,9 +175,9 @@ public class StoryGraph : ScriptableObject
         if (current.nodes == null) return false;
         foreach (BaseNode node in current.nodes)
         {
-            if (node is not SubGraphNode subGraphNode || subGraphNode.subGraph == null) continue;
-            if (subGraphNode.subGraph == target) return true;
-            if (ContainsGraph(subGraphNode.subGraph, target, visited)) return true;
+            if (!TryGetNestedGraph(node, out StoryGraph nested)) continue;
+            if (nested == target) return true;
+            if (ContainsGraph(nested, target, visited)) return true;
         }
 
         return false;

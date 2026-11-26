@@ -23,6 +23,10 @@ public class StoryNodeUI : Node
     private Button choiceFoldButton;
     private VisualElement choiceSettingsBody;
     private bool syncingChoiceCollapse;
+    private Button choiceMultiFoldButton;
+    private VisualElement choiceMultiSettingsBody;
+    private bool syncingChoiceMultiCollapse;
+    private const float ChoiceMultiNodeWidth = 320f;
     private Button exitGameFoldButton;
     private VisualElement exitGameSettingsBody;
     private bool syncingExitGameCollapse;
@@ -61,6 +65,11 @@ public class StoryNodeUI : Node
         {
             BuildChoicePorts(choiceNode);
         }
+        else if (nodeData is ChoiceNodeMulti choiceMulti)
+        {
+            choiceMulti.EnsureEntries();
+            BuildChoiceMultiPorts(choiceMulti);
+        }
         else if (nodeData is RandomBranchNode randomBranchNode)
         {
             BuildRandomBranchPorts(randomBranchNode);
@@ -81,12 +90,15 @@ public class StoryNodeUI : Node
             expanded = playClipNode.nodeExpanded;
         else if (data is ChoiceNode expandedChoice)
             expanded = expandedChoice.nodeExpanded;
+        else if (data is ChoiceNodeMulti expandedMulti)
+            expanded = expandedMulti.nodeExpanded;
         else if (data is ExitGameNode expandedExitGame)
             expanded = expandedExitGame.nodeExpanded;
         else if (data is SpawnPrefabNode expandedSpawn)
             expanded = expandedSpawn.nodeExpanded;
         BindPlayClipCollapse();
         BindChoiceCollapse();
+        BindChoiceMultiCollapse();
         BindExitGameCollapse();
         BindSpawnPrefabCollapse();
         RefreshExpandedState();
@@ -185,6 +197,8 @@ public class StoryNodeUI : Node
         title = StoryGraphNodeNaming.Build(data);
         if (data is ChoiceNode)
             ApplyChoiceNodeChrome();
+        else if (data is ChoiceNodeMulti)
+            ApplyChoiceMultiChrome();
     }
 
     private void ApplyNodeStyle()
@@ -194,10 +208,10 @@ public class StoryNodeUI : Node
         {
             titleColor = new Color(0.20f, 0.55f, 0.25f);
         }
-        else if (data is ConditionNode || data is ConditionMultiNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode)
+        else if (data is ConditionNode || data is ConditionMultiNode || data is VariableOperationNode || data is CustomCNode || data is BoolOperationNode || data is VariableDeclareNode || data is LocalVariableDeclareNode)
         {
             titleColor = new Color(0.48f, 0.22f, 0.62f);
-            if (data is VariableDeclareNode || data is ConditionMultiNode) style.minWidth = 300;
+            if (data is VariableDeclareNode || data is LocalVariableDeclareNode || data is ConditionMultiNode || data is CustomCNode) style.minWidth = 300;
         }
         else if (data is PlaybackSpeedNode)
         {
@@ -222,6 +236,11 @@ public class StoryNodeUI : Node
         else if (data is SubGraphNode)
         {
             titleColor = new Color(0.18f, 0.40f, 0.62f);
+        }
+        else if (data is SubGraphInputNode)
+        {
+            titleColor = new Color(0.12f, 0.46f, 0.55f);
+            style.minWidth = 280;
         }
         else if (data is LabelNode)
         {
@@ -264,6 +283,13 @@ public class StoryNodeUI : Node
             titleButtonContainer.style.display = DisplayStyle.None;
             extensionContainer.style.display = DisplayStyle.None;
         }
+        else if (data is ChoiceNodeMulti)
+        {
+            titleColor = new Color(0.16f, 0.38f, 0.58f);
+            titleContainer.style.backgroundColor = new StyleColor(titleColor);
+            ApplyChoiceMultiChrome();
+            return;
+        }
         else if (data is ChoiceNode)
         {
             ApplyChoiceNodeChrome();
@@ -276,7 +302,7 @@ public class StoryNodeUI : Node
 
         titleContainer.style.backgroundColor = new StyleColor(titleColor);
 
-        if (data is ConditionNode || data is ConditionMultiNode || data is VariableOperationNode || data is BoolOperationNode || data is VariableDeclareNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is WaitNode || data is TextNode || data is VariableTextNode || data is SpawnPrefabNode || data is ExitGameNode)
+        if (data is ConditionNode || data is ConditionMultiNode || data is VariableOperationNode || data is CustomCNode || data is BoolOperationNode || data is VariableDeclareNode || data is LocalVariableDeclareNode || data is PlaybackSpeedNode || data is RandomBranchNode || data is ConditionBranchNode || data is LabelNode || data is GotoNode || data is WaitNode || data is TextNode || data is VariableTextNode || data is SpawnPrefabNode || data is ExitGameNode)
         {
             ApplyProminentTitleStyle(12);
         }
@@ -334,6 +360,11 @@ public class StoryNodeUI : Node
             {
                 shownChoice.nodeExpanded = true;
                 UnityEditor.EditorUtility.SetDirty(shownChoice);
+            }
+            if (data is ChoiceNodeMulti shownMulti && !shownMulti.nodeExpanded)
+            {
+                shownMulti.nodeExpanded = true;
+                UnityEditor.EditorUtility.SetDirty(shownMulti);
             }
             if (data is ExitGameNode shownExitGame && !shownExitGame.nodeExpanded)
             {
@@ -461,6 +492,46 @@ public class StoryNodeUI : Node
         }
     }
 
+    private void BindChoiceMultiCollapse()
+    {
+        if (data is not ChoiceNodeMulti choiceMulti) return;
+
+        Toggle collapse = this.Q<Toggle>("collapse-button");
+        if (collapse != null)
+        {
+            collapse.tooltip = "ノード全体の折りたたみと展開";
+            collapse.RegisterValueChangedCallback(_ =>
+            {
+                if (syncingChoiceMultiCollapse) return;
+                RecordNodeUndo("ノードを折りたたむ");
+                choiceMulti.nodeExpanded = expanded;
+                UnityEditor.EditorUtility.SetDirty(choiceMulti);
+            });
+        }
+
+        Undo.undoRedoPerformed += SyncChoiceMultiCollapse;
+        RegisterCallback<DetachFromPanelEvent>(_ => Undo.undoRedoPerformed -= SyncChoiceMultiCollapse);
+    }
+
+    private void SyncChoiceMultiCollapse()
+    {
+        if (syncingChoiceMultiCollapse || data is not ChoiceNodeMulti choiceMulti) return;
+
+        syncingChoiceMultiCollapse = true;
+        try
+        {
+            if (expanded != choiceMulti.nodeExpanded)
+                expanded = choiceMulti.nodeExpanded;
+            if (choiceMultiFoldButton != null && choiceMultiSettingsBody != null)
+                ApplySettingsFold(choiceMultiFoldButton, choiceMultiSettingsBody, choiceMulti.settingsExpanded);
+            ApplyChoiceMultiChrome();
+        }
+        finally
+        {
+            syncingChoiceMultiCollapse = false;
+        }
+    }
+
     private void BindExitGameCollapse()
     {
         if (data is not ExitGameNode exitGameNode) return;
@@ -561,6 +632,37 @@ public class StoryNodeUI : Node
             titleLabel.style.fontSize = 12;
             titleLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
             titleLabel.style.maxWidth = ChoiceNodeWidth - 48f;
+            titleLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            titleLabel.style.overflow = Overflow.Hidden;
+            titleLabel.style.textOverflow = TextOverflow.Ellipsis;
+            titleLabel.tooltip = title;
+        }
+
+        titleContainer.style.overflow = Overflow.Hidden;
+        inputContainer.style.flexShrink = 1;
+        inputContainer.style.minWidth = 0;
+        outputContainer.style.flexShrink = 1;
+        outputContainer.style.minWidth = 0;
+        CompactChoicePorts(inputContainer);
+        CompactChoicePorts(outputContainer);
+    }
+
+    private void ApplyChoiceMultiChrome()
+    {
+        style.width = ChoiceMultiNodeWidth;
+        style.minWidth = ChoiceMultiNodeWidth;
+        style.maxWidth = ChoiceMultiNodeWidth;
+
+        Label titleLabel = this.Q<Label>("title-label");
+        if (titleLabel != null)
+        {
+            titleLabel.style.flexGrow = 1;
+            titleLabel.style.flexShrink = 1;
+            titleLabel.style.minWidth = 0;
+            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            titleLabel.style.fontSize = 12;
+            titleLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+            titleLabel.style.maxWidth = ChoiceMultiNodeWidth - 48f;
             titleLabel.style.whiteSpace = WhiteSpace.NoWrap;
             titleLabel.style.overflow = Overflow.Hidden;
             titleLabel.style.textOverflow = TextOverflow.Ellipsis;
@@ -735,6 +837,15 @@ public class StoryNodeUI : Node
             extensionContainer.Add(playClipFoldButton);
             extensionContainer.Add(playClipSettingsBody);
 
+            AddVariableDropdown(
+                "Video 変数",
+                () => playClipNode.videoVariable,
+                value => playClipNode.videoVariable = value,
+                "選ぶと、この変数の Video Clip を再生します。未選択なら下の Video Clip です。",
+                playClipSettingsBody,
+                StoryVariableType.VideoClip,
+                true);
+
             ObjectField clipField = new ObjectField("Video Clip")
             {
                 objectType = typeof(VideoClip),
@@ -750,6 +861,15 @@ public class StoryNodeUI : Node
                 RefreshMediaThumbnail();
             });
             playClipSettingsBody.Add(clipField);
+
+            AddVariableDropdown(
+                "Audio 変数",
+                () => playClipNode.audioVariable,
+                value => playClipNode.audioVariable = value,
+                "選ぶと、この変数の Audio Clip を再生します。未選択なら下の Audio Clip です。",
+                playClipSettingsBody,
+                StoryVariableType.AudioClip,
+                true);
 
             ObjectField audioField = new ObjectField("Audio Clip")
             {
@@ -901,6 +1021,15 @@ public class StoryNodeUI : Node
             });
             extensionContainer.Add(durationField);
 
+            AddVariableDropdown(
+                "Audio 変数",
+                () => playImageNode.audioVariable,
+                value => playImageNode.audioVariable = value,
+                "選ぶと、この変数の Audio Clip を再生します。未選択なら下の Audio Clip です。",
+                null,
+                StoryVariableType.AudioClip,
+                true);
+
             ObjectField audioField = new ObjectField("Audio Clip")
             {
                 objectType = typeof(AudioClip),
@@ -1028,6 +1157,10 @@ public class StoryNodeUI : Node
                 evt.StopPropagation();
             });
         }
+        else if (data is SubGraphInputNode subGraphInputNode)
+        {
+            DrawSubGraphInputSettings(subGraphInputNode);
+        }
         else if (data is LabelNode labelNode)
         {
             TextField nameField = new TextField("名前")
@@ -1076,27 +1209,15 @@ public class StoryNodeUI : Node
             });
             extensionContainer.Add(secField);
         }
-        else if (data is VariableDeclareNode declareNode)
+        else if (data is VariableDeclareNode || data is LocalVariableDeclareNode)
         {
-            DrawVariableDeclareSettings(declareNode);
+            DrawVariableDeclareSettings(data);
         }
         // ==========================================
         // ★追加：もしデータが ConditionNode だったら…
         // ==========================================
         else if (data is ConditionNode conditionNode)
         {
-            AddVariableDropdown("変数名", () => conditionNode.variableName, value => conditionNode.variableName = value, "比較する変数");
-
-            EnumField opField = new EnumField("条件", conditionNode.comparison);
-            opField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                conditionNode.comparison = (ConditionOperator)evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(conditionNode);
-                RefreshDynamicTitle();
-            });
-            extensionContainer.Add(opField);
-
             IntegerField valField = new IntegerField("比較する値")
             {
                 value = conditionNode.compareValue,
@@ -1109,7 +1230,52 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(conditionNode);
                 RefreshDynamicTitle();
             });
+
+            FloatField floatField = new FloatField("比較する値")
+            {
+                value = conditionNode.FloatCompareValue(),
+                tooltip = "Float 変数と比べる値。小数のまま判定する"
+            };
+            floatField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                conditionNode.floatCompareReady = true;
+                conditionNode.floatCompareValue = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(conditionNode);
+                RefreshDynamicTitle();
+            });
+
+            void ShowCompare()
+            {
+                bool asFloat = StoryVariableCatalog.TryGetType(this, conditionNode.variableName, out StoryVariableType variableType)
+                    && variableType == StoryVariableType.Float;
+                valField.style.display = asFloat ? DisplayStyle.None : DisplayStyle.Flex;
+                floatField.style.display = asFloat ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            AddVariableDropdown(
+                "変数名",
+                () => conditionNode.variableName,
+                value =>
+                {
+                    conditionNode.variableName = value;
+                    ShowCompare();
+                },
+                "比較する変数。Float なら小数のまま判定する");
+
+            EnumField opField = new EnumField("条件", conditionNode.comparison);
+            opField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                conditionNode.comparison = (ConditionOperator)evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(conditionNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(opField);
+
+            ShowCompare();
             extensionContainer.Add(valField);
+            extensionContainer.Add(floatField);
         }
         else if (data is ConditionMultiNode conditionMultiNode)
         {
@@ -1120,7 +1286,38 @@ public class StoryNodeUI : Node
         // ==========================================
         else if (data is VariableOperationNode varOpNode)
         {
-            AddVariableDropdown("対象変数", () => varOpNode.variableName, value => varOpNode.variableName = value, "演算する変数");
+            FloatField floatField = new FloatField("数値")
+            {
+                value = varOpNode.FloatLiteral(),
+                tooltip = "代入・加減乗除・剰余に使う数値。計算は小数のまま。整数変数へ入れるときは結果の小数点以下を切り捨てる"
+            };
+            floatField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                varOpNode.floatOperandReady = true;
+                varOpNode.floatOperandValue = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(varOpNode);
+                RefreshDynamicTitle();
+            });
+
+            VisualElement operandVarField = CreateVariableDropdown(
+                "参照変数",
+                () => varOpNode.operandVariableName,
+                value => varOpNode.operandVariableName = value,
+                "右辺に使う変数。Int / Float / Bool を数値として読む");
+
+            void ShowOperand()
+            {
+                bool literal = !varOpNode.useVariableOperand;
+                floatField.style.display = literal ? DisplayStyle.Flex : DisplayStyle.None;
+                operandVarField.style.display = varOpNode.useVariableOperand ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            AddVariableDropdown(
+                "対象変数",
+                () => varOpNode.variableName,
+                value => varOpNode.variableName = value,
+                "演算する変数。計算は小数。整数変数へ入れるときは結果の小数点以下を切り捨てる");
 
             EnumField opField = new EnumField("演算", varOpNode.operation);
             opField.RegisterValueChangedCallback(evt =>
@@ -1136,40 +1333,46 @@ public class StoryNodeUI : Node
             {
                 value = varOpNode.useVariableOperand
             };
-
-            IntegerField valField = new IntegerField("数値")
-            {
-                value = varOpNode.operandValue
-            };
-            valField.style.display = varOpNode.useVariableOperand ? DisplayStyle.None : DisplayStyle.Flex;
-            valField.RegisterValueChangedCallback(evt =>
-            {
-                RecordNodeUndo();
-                varOpNode.operandValue = evt.newValue;
-                UnityEditor.EditorUtility.SetDirty(varOpNode);
-                RefreshDynamicTitle();
-            });
-
-            VisualElement operandVarField = CreateVariableDropdown(
-                "参照変数",
-                () => varOpNode.operandVariableName,
-                value => varOpNode.operandVariableName = value,
-                "右辺に使う変数");
-            operandVarField.style.display = varOpNode.useVariableOperand ? DisplayStyle.Flex : DisplayStyle.None;
-
             useVarToggle.RegisterValueChangedCallback(evt =>
             {
                 RecordNodeUndo();
                 varOpNode.useVariableOperand = evt.newValue;
-                valField.style.display = evt.newValue ? DisplayStyle.None : DisplayStyle.Flex;
-                operandVarField.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
+                ShowOperand();
                 UnityEditor.EditorUtility.SetDirty(varOpNode);
                 RefreshDynamicTitle();
             });
 
+            ShowOperand();
             extensionContainer.Add(useVarToggle);
-            extensionContainer.Add(valField);
+            extensionContainer.Add(floatField);
             extensionContainer.Add(operandVarField);
+        }
+        else if (data is CustomCNode customCNode)
+        {
+            AddHelpButton(CustomCNode.Summary);
+            AddVariableDropdown(
+                "代入先",
+                () => customCNode.variableName,
+                value => customCNode.variableName = value,
+                "計算結果を入れる Float 変数",
+                typeFilter: StoryVariableType.Float);
+
+            TextField expressionField = new TextField("計算式")
+            {
+                value = customCNode.expression,
+                multiline = true,
+                tooltip = "例: (A + B) * 0.5 / C    小数、変数名、+ - * / %、括弧"
+            };
+            expressionField.style.minHeight = 64;
+            expressionField.style.whiteSpace = WhiteSpace.Normal;
+            expressionField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                customCNode.expression = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(customCNode);
+                RefreshDynamicTitle();
+            });
+            extensionContainer.Add(expressionField);
         }
         else if (data is BoolOperationNode boolOpNode)
         {
@@ -1278,7 +1481,7 @@ public class StoryNodeUI : Node
                 UnityEditor.EditorUtility.SetDirty(choiceNode);
             });
             choiceSettingsBody.Add(prefabField);
-            AddUiParentToggle(choiceNode, choiceNode.parentToUiParent, value => choiceNode.parentToUiParent = value, choiceSettingsBody);
+            AddParentSlotField(choiceNode, choiceNode.GetParentSlot(), choiceNode.SetParentSlot, choiceSettingsBody);
 
             VisualElement choiceListContainer = new VisualElement();
             choiceListContainer.style.minWidth = 0;
@@ -1335,6 +1538,10 @@ public class StoryNodeUI : Node
             addChoiceBtn.style.whiteSpace = WhiteSpace.Normal;
             addChoiceBtn.style.minWidth = 0;
             choiceSettingsBody.Add(addChoiceBtn);
+        }
+        else if (data is ChoiceNodeMulti choiceMulti)
+        {
+            DrawChoiceMultiSettings(choiceMulti);
         }
         else if (data is TextNode textNode)
         {
@@ -1687,7 +1894,7 @@ public class StoryNodeUI : Node
     {
         Port port = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, typeof(bool));
         port.portName = portName;
-        if (data is ChoiceNode)
+        if (data is ChoiceNode || data is ChoiceNodeMulti)
             CompactChoicePort(port);
         return port;
     }
@@ -1762,7 +1969,7 @@ public class StoryNodeUI : Node
         List<Port> ports = GetOutputPorts();
         if (index < 0 || index >= ports.Count) return;
         ports[index].portName = newName;
-        if (data is ChoiceNode)
+        if (data is ChoiceNode || data is ChoiceNodeMulti)
             CompactChoicePort(ports[index]);
         RefreshExpandedState();
         RefreshPorts();
@@ -2000,6 +2207,382 @@ public class StoryNodeUI : Node
 
             container.Add(row);
         }
+    }
+
+    private void DrawChoiceMultiSettings(ChoiceNodeMulti node)
+    {
+        node.EnsureEntries();
+
+        Label helpLabel = AddHelpButton(ChoiceNodeMulti.Summary);
+        if (helpLabel != null) helpLabel.style.maxWidth = 292;
+
+        choiceMultiSettingsBody = new VisualElement();
+        choiceMultiSettingsBody.style.minWidth = 0;
+        choiceMultiFoldButton = new Button(() =>
+        {
+            RecordNodeUndo("設定を折りたたむ");
+            node.settingsExpanded = !node.settingsExpanded;
+            UnityEditor.EditorUtility.SetDirty(node);
+            ApplySettingsFold(choiceMultiFoldButton, choiceMultiSettingsBody, node.settingsExpanded);
+            RefreshExpandedState();
+        })
+        {
+            tooltip = "設定項目の折りたたみと展開"
+        };
+        ApplySettingsFold(choiceMultiFoldButton, choiceMultiSettingsBody, node.settingsExpanded);
+        extensionContainer.Add(choiceMultiFoldButton);
+        extensionContainer.Add(choiceMultiSettingsBody);
+
+        Toggle destroyToggle = new Toggle("選択後にUIを消す")
+        {
+            value = node.autoDestroyUI,
+            tooltip = "オン: どれかを選ぶと、このノードが出したUIをまとめて消してから進みます"
+        };
+        destroyToggle.RegisterValueChangedCallback(evt =>
+        {
+            RecordNodeUndo();
+            node.autoDestroyUI = evt.newValue;
+            UnityEditor.EditorUtility.SetDirty(node);
+        });
+        choiceMultiSettingsBody.Add(destroyToggle);
+
+        VisualElement uiList = new VisualElement();
+        uiList.style.minWidth = 0;
+        choiceMultiSettingsBody.Add(uiList);
+        RedrawChoiceMultiList(node, uiList);
+
+        Button addUiBtn = new Button(() =>
+        {
+            BeginGraphEdit("UIを追加");
+            ChoiceMultiUiEntry added = new ChoiceMultiUiEntry
+            {
+                uiId = node.AllocateUiId(),
+                parentSlot = 0,
+                choices = new List<string> { "Choice 1" }
+            };
+            node.uis.Add(added);
+            UnityEditor.EditorUtility.SetDirty(node);
+            RefreshDynamicTitle();
+            AddOutputPort(ChoiceNodeMulti.PortName(added.uiId, "Choice 1"));
+            RedrawChoiceMultiList(node, uiList);
+            EndGraphEdit();
+        })
+        {
+            text = "＋ UIを追加"
+        };
+        addUiBtn.style.whiteSpace = WhiteSpace.Normal;
+        addUiBtn.style.minWidth = 0;
+        choiceMultiSettingsBody.Add(addUiBtn);
+    }
+
+    private void RedrawChoiceMultiList(ChoiceNodeMulti node, VisualElement container)
+    {
+        container.Clear();
+        node.EnsureEntries();
+        if (node.uis == null) return;
+
+        for (int i = 0; i < node.uis.Count; i++)
+        {
+            int uiIndex = i;
+            ChoiceMultiUiEntry entry = node.uis[uiIndex];
+            if (entry == null) continue;
+
+            VisualElement block = new VisualElement();
+            block.style.minWidth = 0;
+            block.style.marginTop = 4;
+            block.style.marginBottom = 2;
+            block.style.paddingLeft = 4;
+            block.style.paddingRight = 4;
+            block.style.paddingTop = 4;
+            block.style.paddingBottom = 4;
+            block.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.18f));
+            block.style.borderTopLeftRadius = 4;
+            block.style.borderTopRightRadius = 4;
+            block.style.borderBottomLeftRadius = 4;
+            block.style.borderBottomRightRadius = 4;
+
+            VisualElement header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            Label uiLabel = new Label("UI" + entry.uiId);
+            uiLabel.style.flexGrow = 1;
+            uiLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.Add(uiLabel);
+
+            Button deleteUi = new Button(() =>
+            {
+                BeginGraphEdit("UIを削除");
+                ChoiceMultiUiEntry removing = node.uis[uiIndex];
+                if (removing?.choices != null)
+                {
+                    for (int c = removing.choices.Count - 1; c >= 0; c--)
+                        RemoveOutputPortByName(ChoiceNodeMulti.PortName(removing.uiId, removing.choices[c]));
+                }
+
+                node.uis.RemoveAt(uiIndex);
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+                RedrawChoiceMultiList(node, container);
+                EndGraphEdit();
+            })
+            {
+                text = "✕",
+                tooltip = "このUIを削除"
+            };
+            deleteUi.style.width = 22;
+            deleteUi.style.minWidth = 22;
+            deleteUi.style.flexShrink = 0;
+            header.Add(deleteUi);
+            block.Add(header);
+
+            ObjectField prefabField = new ObjectField("UI Prefab")
+            {
+                objectType = typeof(GameObject),
+                value = entry.prefab
+            };
+            prefabField.style.minWidth = 0;
+            prefabField.style.flexShrink = 1;
+            prefabField.labelElement.style.minWidth = 64;
+            prefabField.labelElement.style.width = 64;
+            prefabField.RegisterValueChangedCallback(evt =>
+            {
+                RecordNodeUndo();
+                entry.prefab = evt.newValue as GameObject;
+                UnityEditor.EditorUtility.SetDirty(node);
+            });
+            block.Add(prefabField);
+
+            AddParentSlotField(node, entry.parentSlot, value => entry.parentSlot = value, block);
+
+            Button autoDetect = new Button(() =>
+            {
+                if (entry.prefab == null) return;
+                UnityEngine.UI.Button[] buttons = entry.prefab.GetComponentsInChildren<UnityEngine.UI.Button>(true);
+                if (buttons.Length == 0) return;
+
+                BeginGraphEdit("選択肢を自動取得");
+                entry.choices.Clear();
+                for (int b = 0; b < buttons.Length; b++)
+                {
+                    string buttonName = buttons[b].gameObject.name;
+                    if (!entry.choices.Contains(buttonName))
+                        entry.choices.Add(buttonName);
+                }
+
+                if (entry.choices.Count == 0)
+                    entry.choices.Add("Choice 1");
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+                BuildChoiceMultiPorts(node);
+                RedrawChoiceMultiList(node, container);
+                EndGraphEdit();
+            })
+            {
+                text = "🔍 プレハブからボタンを自動取得",
+                tooltip = "この UI Prefab 内の Button 名を、この UI の選択肢にします"
+            };
+            autoDetect.style.whiteSpace = WhiteSpace.Normal;
+            autoDetect.style.minWidth = 0;
+            block.Add(autoDetect);
+
+            VisualElement choiceList = new VisualElement();
+            choiceList.style.minWidth = 0;
+            block.Add(choiceList);
+            RedrawChoiceMultiChoices(node, entry, uiIndex, choiceList, container);
+
+            Button addChoice = new Button(() =>
+            {
+                BeginGraphEdit("選択肢を追加");
+                if (entry.choices == null) entry.choices = new List<string>();
+                string choiceName = "Choice " + (entry.choices.Count + 1);
+                entry.choices.Add(choiceName);
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+                int insertAt = ChoiceMultiPortIndex(node, uiIndex, entry.choices.Count - 1);
+                AddOutputPort(ChoiceNodeMulti.PortName(entry.uiId, choiceName), insertAt);
+                RedrawChoiceMultiList(node, container);
+                EndGraphEdit();
+            })
+            {
+                text = "＋ 選択肢を追加"
+            };
+            addChoice.style.whiteSpace = WhiteSpace.Normal;
+            addChoice.style.minWidth = 0;
+            block.Add(addChoice);
+            container.Add(block);
+        }
+    }
+
+    private void RedrawChoiceMultiChoices(
+        ChoiceNodeMulti node,
+        ChoiceMultiUiEntry entry,
+        int uiIndex,
+        VisualElement choiceList,
+        VisualElement uiList)
+    {
+        choiceList.Clear();
+        if (entry.choices == null) entry.choices = new List<string> { "Choice 1" };
+
+        for (int i = 0; i < entry.choices.Count; i++)
+        {
+            int choiceIndex = i;
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.minWidth = 0;
+            row.style.marginTop = 1;
+            row.style.marginBottom = 1;
+
+            TextField nameField = new TextField
+            {
+                value = entry.choices[choiceIndex],
+                tooltip = "Button の名前。この UI の中で一致したものだけ分岐します"
+            };
+            nameField.style.flexGrow = 1;
+            nameField.style.flexShrink = 1;
+            nameField.style.minWidth = 0;
+            nameField.labelElement.style.display = DisplayStyle.None;
+            nameField.RegisterValueChangedCallback(evt =>
+            {
+                BeginGraphEdit("選択肢名を変更");
+                string oldName = ChoiceNodeMulti.PortName(entry.uiId, evt.previousValue);
+                entry.choices[choiceIndex] = evt.newValue;
+                UnityEditor.EditorUtility.SetDirty(node);
+                RefreshDynamicTitle();
+                RenameOutputPortByName(oldName, ChoiceNodeMulti.PortName(entry.uiId, evt.newValue));
+                EndGraphEdit();
+            });
+            row.Add(nameField);
+
+            if (entry.choices.Count > 1)
+            {
+                Button deleteChoice = new Button(() =>
+                {
+                    BeginGraphEdit("選択肢を削除");
+                    string portName = ChoiceNodeMulti.PortName(entry.uiId, entry.choices[choiceIndex]);
+                    entry.choices.RemoveAt(choiceIndex);
+                    UnityEditor.EditorUtility.SetDirty(node);
+                    RefreshDynamicTitle();
+                    RemoveOutputPortByName(portName);
+                    RedrawChoiceMultiList(node, uiList);
+                    EndGraphEdit();
+                })
+                {
+                    text = "✕"
+                };
+                deleteChoice.style.width = 22;
+                deleteChoice.style.minWidth = 22;
+                deleteChoice.style.flexShrink = 0;
+                deleteChoice.style.marginLeft = 2;
+                row.Add(deleteChoice);
+            }
+
+            choiceList.Add(row);
+        }
+    }
+
+    private void BuildChoiceMultiPorts(ChoiceNodeMulti node)
+    {
+        node.EnsureEntries();
+        RebuildOutputPortsPreservingEdges(() =>
+        {
+            outputContainer.Clear();
+            if (node.uis == null) return;
+
+            for (int i = 0; i < node.uis.Count; i++)
+            {
+                ChoiceMultiUiEntry entry = node.uis[i];
+                if (entry?.choices == null) continue;
+                for (int c = 0; c < entry.choices.Count; c++)
+                    outputContainer.Add(CreateOutputPort(ChoiceNodeMulti.PortName(entry.uiId, entry.choices[c])));
+            }
+        });
+    }
+
+    private static int ChoiceMultiPortIndex(ChoiceNodeMulti node, int uiIndex, int choiceIndex)
+    {
+        int index = 0;
+        if (node?.uis == null) return choiceIndex;
+
+        for (int i = 0; i < uiIndex && i < node.uis.Count; i++)
+        {
+            ChoiceMultiUiEntry entry = node.uis[i];
+            if (entry?.choices != null) index += entry.choices.Count;
+        }
+
+        return index + choiceIndex;
+    }
+
+    private void RemoveOutputPortByName(string portName)
+    {
+        List<Port> ports = GetOutputPorts();
+        for (int i = 0; i < ports.Count; i++)
+        {
+            if (ports[i].portName != portName) continue;
+            RemoveOutputPortAt(i);
+            return;
+        }
+    }
+
+    private void RenameOutputPortByName(string oldName, string newName)
+    {
+        List<Port> ports = GetOutputPorts();
+        for (int i = 0; i < ports.Count; i++)
+        {
+            if (ports[i].portName != oldName) continue;
+            ports[i].portName = newName;
+            if (data is ChoiceNode || data is ChoiceNodeMulti)
+                CompactChoicePort(ports[i]);
+            RefreshExpandedState();
+            RefreshPorts();
+            return;
+        }
+    }
+
+    private DropdownField AddParentSlotField(BaseNode node, int current, Action<int> setValue, VisualElement parent)
+    {
+        ParentSlotChoices(current, out List<string> labels, out List<int> slots);
+        int selected = slots.IndexOf(current);
+        if (selected < 0) selected = 1;
+        DropdownField parentField = new DropdownField("親", labels, labels[selected])
+        {
+            tooltip = "Canvas直下、UI Parent、UIParent1 以降。未設定の親は再生時に Canvas 直下になります"
+        };
+        parentField.style.minWidth = 0;
+        parentField.RegisterValueChangedCallback(evt =>
+        {
+            int index = labels.IndexOf(evt.newValue);
+            if (index < 0) return;
+            RecordNodeUndo();
+            setValue(slots[index]);
+            UnityEditor.EditorUtility.SetDirty(node);
+        });
+        (parent ?? extensionContainer).Add(parentField);
+        return parentField;
+    }
+
+    private static void ParentSlotChoices(int parentSlot, out List<string> labels, out List<int> slots)
+    {
+        slots = new List<int> { -1, 0 };
+        labels = new List<string> { "Canvas直下", "UI Parent" };
+        int extra = SceneExtraParentCount();
+        if (parentSlot > extra) extra = parentSlot;
+        for (int n = 1; n <= extra; n++)
+        {
+            slots.Add(n);
+            labels.Add("UIParent" + n);
+        }
+    }
+
+    private static int SceneExtraParentCount()
+    {
+#if UNITY_2023_1_OR_NEWER
+        StoryPlayer player = UnityEngine.Object.FindFirstObjectByType<StoryPlayer>();
+#else
+        StoryPlayer player = UnityEngine.Object.FindObjectOfType<StoryPlayer>();
+#endif
+        if (player == null || player.uiParents == null) return 0;
+        return player.uiParents.Length;
     }
 
     private void BuildRandomBranchPorts(RandomBranchNode node)
@@ -2340,11 +2923,282 @@ public class StoryNodeUI : Node
     }
 
     /// <summary>
+    /// SubGraph Input の参照先と、変数宣言に合わせた入力値。
+    /// </summary>
+    private void DrawSubGraphInputSettings(SubGraphInputNode node)
+    {
+        StoryGraph ownerGraph = UnityEditor.AssetDatabase.LoadAssetAtPath<StoryGraph>(
+            UnityEditor.AssetDatabase.GetAssetPath(node));
+
+        ObjectField graphField = new ObjectField("Sub Graph")
+        {
+            objectType = typeof(StoryGraph),
+            value = node.subGraph
+        };
+
+        Label cycleWarning = new Label("循環参照です。自分自身や、自分を含むグラフは指定できません。")
+        {
+            style =
+            {
+                color = new StyleColor(new Color(1f, 0.55f, 0.35f)),
+                whiteSpace = WhiteSpace.Normal
+            }
+        };
+        cycleWarning.style.display = StoryGraph.WouldCreateCycle(ownerGraph, node.subGraph)
+            ? DisplayStyle.Flex
+            : DisplayStyle.None;
+
+        VisualElement inputList = new VisualElement();
+
+        graphField.RegisterValueChangedCallback(evt =>
+        {
+            StoryGraph assigned = evt.newValue as StoryGraph;
+            if (StoryGraph.WouldCreateCycle(ownerGraph, assigned))
+            {
+                Debug.LogError("【SubGraph】循環参照になるため設定できません。");
+                graphField.SetValueWithoutNotify(node.subGraph);
+                return;
+            }
+
+            RecordNodeUndo();
+            node.subGraph = assigned;
+            UnityEditor.EditorUtility.SetDirty(node);
+            RefreshDynamicTitle();
+            cycleWarning.style.display = DisplayStyle.None;
+            RedrawSubGraphInputs(node, inputList);
+        });
+        extensionContainer.Add(graphField);
+        extensionContainer.Add(cycleWarning);
+
+        Button openButton = new Button(() =>
+        {
+            if (node.subGraph != null)
+            {
+                UnityEditor.AssetDatabase.OpenAsset(node.subGraph);
+            }
+        })
+        {
+            text = "サブグラフを開く",
+            tooltip = "このサブグラフを開きます。上部の「戻る」やパンくずで元のグラフに戻れます。"
+        };
+        extensionContainer.Add(openButton);
+
+        Label inputNote = new Label("入る直前に値を変数へ書きます。参照先のグローバル宣言とローカル宣言を出します。見出しは区切りです。左をドラッグすると、参照先の宣言順を並べ替えます。")
+        {
+            style =
+            {
+                color = new StyleColor(new Color(0.75f, 0.75f, 0.75f)),
+                whiteSpace = WhiteSpace.Normal,
+                marginTop = 4
+            }
+        };
+        extensionContainer.Add(inputNote);
+        extensionContainer.Add(inputList);
+        RedrawSubGraphInputs(node, inputList);
+
+        RefreshDynamicTitle();
+
+        titleContainer.RegisterCallback<MouseDownEvent>(evt =>
+        {
+            if (evt.clickCount < 2 || node.subGraph == null) return;
+            UnityEditor.AssetDatabase.OpenAsset(node.subGraph);
+            evt.StopPropagation();
+        });
+    }
+
+    private void RedrawSubGraphInputs(SubGraphInputNode node, VisualElement container)
+    {
+        if (node.SyncInputs())
+        {
+            UnityEditor.EditorUtility.SetDirty(node);
+        }
+
+        container.Clear();
+        if (node.inputs == null || node.inputs.Count == 0)
+        {
+            string emptyText = node.subGraph == null
+                ? "サブグラフが未設定です。"
+                : "このグラフに変数宣言はありません。";
+            Label empty = new Label(emptyText)
+            {
+                style =
+                {
+                    color = new StyleColor(new Color(0.75f, 0.75f, 0.75f)),
+                    whiteSpace = WhiteSpace.Normal,
+                    marginTop = 2
+                }
+            };
+            container.Add(empty);
+            return;
+        }
+
+        int shown = 0;
+        for (int i = 0; i < node.inputs.Count; i++)
+        {
+            SubGraphInputValue entry = node.inputs[i];
+            if (entry == null) continue;
+            container.Add(CreateSubGraphInputRow(node, container, entry, shown));
+            shown++;
+        }
+    }
+
+    private VisualElement CreateSubGraphInputRow(SubGraphInputNode node, VisualElement listRoot, SubGraphInputValue entry, int index)
+    {
+        bool heading = entry.type == StoryVariableType.Heading;
+        VisualElement row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.alignItems = Align.Center;
+        row.style.marginBottom = 2;
+        if (heading && index > 0) row.style.marginTop = 8;
+
+        VisualElement handle = CreateReorderHandle("ドラッグして、参照先グラフの宣言順を並べ替えます。");
+        BindReorderHandle(handle, listRoot, index, (from, to) => ReorderSubGraphInputs(node, listRoot, from, to));
+        row.Add(handle);
+
+        Label keyLabel = new Label(entry.key)
+        {
+            tooltip = heading
+                ? "見出し。値は書きません"
+                : "参照先の変数宣言。この呼び出しでこの変数へ値を書きます"
+        };
+        keyLabel.style.flexGrow = heading ? 1 : 0;
+        keyLabel.style.minWidth = 72;
+        keyLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+        if (heading)
+        {
+            keyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            keyLabel.style.color = new StyleColor(new Color(0.92f, 0.92f, 0.92f));
+        }
+        row.Add(keyLabel);
+
+        if (!heading)
+        {
+            VisualElement valueField = CreateSubGraphInputValueField(node, entry);
+            if (valueField != null)
+            {
+                valueField.style.flexGrow = 1;
+                valueField.style.marginLeft = 4;
+                row.Add(valueField);
+            }
+        }
+
+        return row;
+    }
+
+    private void ReorderSubGraphInputs(SubGraphInputNode node, VisualElement listRoot, int from, int to)
+    {
+        if (node == null || node.subGraph == null || from == to) return;
+
+        List<UnityEngine.Object> targets = new List<UnityEngine.Object>();
+        if (node.subGraph.nodes != null)
+        {
+            for (int i = 0; i < node.subGraph.nodes.Count; i++)
+            {
+                BaseNode candidate = node.subGraph.nodes[i];
+                if (candidate is VariableDeclareNode || candidate is LocalVariableDeclareNode)
+                {
+                    targets.Add(candidate);
+                }
+            }
+        }
+        if (targets.Count == 0) return;
+
+        Undo.RecordObjects(targets.ToArray(), "入力順を変更");
+        if (!VariableDeclareNode.MoveShown(node.subGraph, from, to)) return;
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            UnityEditor.EditorUtility.SetDirty(targets[i]);
+        }
+        UnityEditor.EditorUtility.SetDirty(node.subGraph);
+        RedrawSubGraphInputs(node, listRoot);
+    }
+
+    private VisualElement CreateSubGraphInputValueField(SubGraphInputNode node, SubGraphInputValue entry)
+    {
+        switch (entry.type)
+        {
+            case StoryVariableType.Bool:
+                Toggle boolField = new Toggle
+                {
+                    value = entry.boolValue,
+                    tooltip = "入る直前に書く値"
+                };
+                boolField.style.width = 48;
+                boolField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.boolValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return boolField;
+            case StoryVariableType.Float:
+                FloatField floatField = new FloatField
+                {
+                    value = entry.floatValue,
+                    tooltip = "入る直前に書く値"
+                };
+                floatField.style.width = 64;
+                floatField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.floatValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return floatField;
+            case StoryVariableType.String:
+                TextField stringField = new TextField
+                {
+                    value = entry.stringValue ?? "",
+                    tooltip = "入る直前に書く値"
+                };
+                stringField.style.width = 80;
+                stringField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.stringValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return stringField;
+            case StoryVariableType.VideoClip:
+                return CreateClipField(entry.videoClip, typeof(VideoClip), "入る直前に書くクリップ", clip =>
+                {
+                    RecordNodeUndo();
+                    entry.videoClip = clip as VideoClip;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+            case StoryVariableType.AudioClip:
+                return CreateClipField(entry.audioClip, typeof(AudioClip), "入る直前に書くクリップ", clip =>
+                {
+                    RecordNodeUndo();
+                    entry.audioClip = clip as AudioClip;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+            case StoryVariableType.Heading:
+                return null;
+            default:
+                IntegerField intField = new IntegerField
+                {
+                    value = entry.intValue,
+                    tooltip = "入る直前に書く値"
+                };
+                intField.style.width = 64;
+                intField.RegisterValueChangedCallback(evt =>
+                {
+                    RecordNodeUndo();
+                    entry.intValue = evt.newValue;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+                return intField;
+        }
+    }
+
+    /// <summary>
     /// 変数宣言ノードの一覧。1ノードで複数の変数を宣言する。
     /// </summary>
-    private void DrawVariableDeclareSettings(VariableDeclareNode node)
+    private void DrawVariableDeclareSettings(BaseNode node)
     {
-        AddHelpButton(node.GetHelpText());
+        AddHelpButton(((IDeclarationList)node).DeclarationHelp);
 
         VisualElement list = new VisualElement();
         extensionContainer.Add(list);
@@ -2353,8 +3207,8 @@ public class StoryNodeUI : Node
         Button addButton = new Button(() =>
         {
             BeginGraphEdit("変数を追加");
-            if (node.variables == null) node.variables = new List<VariableDeclaration>();
-            node.variables.Add(new VariableDeclaration { key = VariableDeclareNode.NextDefaultKey(node.variables) });
+            if (((IDeclarationList)node).Variables == null) ((IDeclarationList)node).Variables = new List<VariableDeclaration>();
+            ((IDeclarationList)node).Variables.Add(new VariableDeclaration { key = VariableDeclareNode.NextDefaultKey(((IDeclarationList)node).Variables) });
             UnityEditor.EditorUtility.SetDirty(node);
             RedrawVariableDeclarations(node, list);
             EndGraphEdit();
@@ -2363,32 +3217,65 @@ public class StoryNodeUI : Node
             text = "＋ 変数を追加"
         };
         extensionContainer.Add(addButton);
+
+        Button headingButton = new Button(() =>
+        {
+            BeginGraphEdit("見出しを追加");
+            if (((IDeclarationList)node).Variables == null) ((IDeclarationList)node).Variables = new List<VariableDeclaration>();
+            ((IDeclarationList)node).Variables.Add(new VariableDeclaration
+            {
+                key = VariableDeclareNode.NextHeadingKey(((IDeclarationList)node).Variables),
+                type = StoryVariableType.Heading
+            });
+            UnityEditor.EditorUtility.SetDirty(node);
+            RedrawVariableDeclarations(node, list);
+            EndGraphEdit();
+        })
+        {
+            text = "＋ 見出しを追加"
+        };
+        extensionContainer.Add(headingButton);
     }
 
-    private void RedrawVariableDeclarations(VariableDeclareNode node, VisualElement container)
+    private void RedrawVariableDeclarations(BaseNode node, VisualElement container)
     {
         container.Clear();
-        if (node.variables == null) node.variables = new List<VariableDeclaration>();
+        if (((IDeclarationList)node).Variables == null) ((IDeclarationList)node).Variables = new List<VariableDeclaration>();
 
-        for (int i = 0; i < node.variables.Count; i++)
+        for (int i = 0; i < ((IDeclarationList)node).Variables.Count; i++)
         {
             int index = i;
-            VariableDeclaration entry = node.variables[index];
+            VariableDeclaration entry = ((IDeclarationList)node).Variables[index];
             if (entry == null)
             {
-                entry = new VariableDeclaration { key = VariableDeclareNode.NextDefaultKey(node.variables) };
-                node.variables[index] = entry;
+                entry = new VariableDeclaration { key = VariableDeclareNode.NextDefaultKey(((IDeclarationList)node).Variables) };
+                ((IDeclarationList)node).Variables[index] = entry;
             }
 
+            bool heading = entry.type == StoryVariableType.Heading;
             VisualElement row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
             row.style.marginBottom = 2;
+            if (heading && index > 0) row.style.marginTop = 8;
+
+            VisualElement handle = CreateReorderHandle("ドラッグして並べ替えます。SubGraph Input もこの順で表示します。");
+            BindReorderHandle(handle, container, index, (from, to) =>
+            {
+                BeginGraphEdit("入力順を変更");
+                VariableDeclareNode.MoveList(((IDeclarationList)node).Variables, from, to);
+                UnityEditor.EditorUtility.SetDirty(node);
+                RedrawVariableDeclarations(node, container);
+                EndGraphEdit();
+            });
+            row.Add(handle);
 
             TextField keyField = new TextField
             {
                 value = entry.key,
-                tooltip = "変数名。他の変数ノードの一覧に出ます"
+                tooltip = heading
+                    ? "見出し。SubGraph Input では区切りとして表示します"
+                    : "変数名。他の変数ノードの一覧に出ます"
             };
             keyField.style.flexGrow = 1;
             keyField.style.minWidth = 80;
@@ -2405,7 +3292,7 @@ public class StoryNodeUI : Node
             {
                 tooltip = "型"
             };
-            typeField.style.width = 70;
+            typeField.style.width = 96;
             typeField.RegisterValueChangedCallback(evt =>
             {
                 RecordNodeUndo();
@@ -2415,14 +3302,15 @@ public class StoryNodeUI : Node
             });
             row.Add(typeField);
 
-            row.Add(CreateDeclarationValueField(node, entry));
+            VisualElement declarationValue = CreateDeclarationValueField(node, entry);
+            if (declarationValue != null) row.Add(declarationValue);
 
             Button deleteButton = new Button(() =>
             {
                 BeginGraphEdit("変数を削除");
-                if (index >= 0 && index < node.variables.Count)
+                if (index >= 0 && index < ((IDeclarationList)node).Variables.Count)
                 {
-                    node.variables.RemoveAt(index);
+                    ((IDeclarationList)node).Variables.RemoveAt(index);
                 }
                 UnityEditor.EditorUtility.SetDirty(node);
                 RedrawVariableDeclarations(node, container);
@@ -2439,10 +3327,12 @@ public class StoryNodeUI : Node
         RefreshDynamicTitle();
     }
 
-    private VisualElement CreateDeclarationValueField(VariableDeclareNode node, VariableDeclaration entry)
+    private VisualElement CreateDeclarationValueField(BaseNode node, VariableDeclaration entry)
     {
         switch (entry.type)
         {
+            case StoryVariableType.Heading:
+                return null;
             case StoryVariableType.Bool:
                 Toggle boolField = new Toggle
                 {
@@ -2485,6 +3375,20 @@ public class StoryNodeUI : Node
                     UnityEditor.EditorUtility.SetDirty(node);
                 });
                 return stringField;
+            case StoryVariableType.VideoClip:
+                return CreateClipField(entry.defaultVideoClip, typeof(VideoClip), "初期値", clip =>
+                {
+                    RecordNodeUndo();
+                    entry.defaultVideoClip = clip as VideoClip;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
+            case StoryVariableType.AudioClip:
+                return CreateClipField(entry.defaultAudioClip, typeof(AudioClip), "初期値", clip =>
+                {
+                    RecordNodeUndo();
+                    entry.defaultAudioClip = clip as AudioClip;
+                    UnityEditor.EditorUtility.SetDirty(node);
+                });
             default:
                 IntegerField intField = new IntegerField
                 {
@@ -2502,16 +3406,86 @@ public class StoryNodeUI : Node
         }
     }
 
+    private static VisualElement CreateReorderHandle(string tooltip)
+    {
+        Label handle = new Label("≡")
+        {
+            tooltip = tooltip
+        };
+        handle.style.width = 18;
+        handle.style.unityTextAlign = TextAnchor.MiddleCenter;
+        handle.style.color = new StyleColor(new Color(0.65f, 0.65f, 0.65f));
+        handle.style.marginRight = 2;
+        return handle;
+    }
+
+    private static void BindReorderHandle(VisualElement handle, VisualElement listRoot, int index, Action<int, int> move)
+    {
+        handle.RegisterCallback<MouseDownEvent>(evt => evt.StopImmediatePropagation());
+        handle.RegisterCallback<PointerDownEvent>(evt =>
+        {
+            if (evt.button != 0) return;
+            handle.userData = index;
+            handle.CapturePointer(evt.pointerId);
+            evt.StopImmediatePropagation();
+        });
+        handle.RegisterCallback<PointerMoveEvent>(evt =>
+        {
+            if (handle.HasPointerCapture(evt.pointerId)) evt.StopImmediatePropagation();
+        });
+        handle.RegisterCallback<PointerUpEvent>(evt =>
+        {
+            if (!handle.HasPointerCapture(evt.pointerId)) return;
+            int from = handle.userData is int value ? value : index;
+            handle.ReleasePointer(evt.pointerId);
+            int to = RowIndexAt(listRoot, evt.position);
+            evt.StopImmediatePropagation();
+            if (from < 0 || to < 0 || from == to) return;
+            move(from, to);
+        });
+    }
+
+    private static int RowIndexAt(VisualElement listRoot, Vector2 panelPosition)
+    {
+        if (listRoot == null) return -1;
+
+        int index = 0;
+        int count = 0;
+        foreach (VisualElement child in listRoot.Children())
+        {
+            count++;
+            if (panelPosition.y <= child.worldBound.yMax) return index;
+            index++;
+        }
+
+        return count == 0 ? -1 : count - 1;
+    }
+
+    private static VisualElement CreateClipField(UnityEngine.Object value, Type objectType, string tooltip, Action<UnityEngine.Object> setValue)
+    {
+        ObjectField clipField = new ObjectField
+        {
+            objectType = objectType,
+            value = value,
+            tooltip = tooltip
+        };
+        clipField.label = "";
+        clipField.style.width = 140;
+        clipField.RegisterValueChangedCallback(evt => setValue(evt.newValue));
+        return clipField;
+    }
+
     /// <summary>
     /// 既存変数の選択欄。手入力はしない。クリックで Goto と同じ検索窓を開く。
     /// 一覧に無い、いまの変数名はそのまま選択状態で残す。
     /// </summary>
-    private void AddVariableDropdown(string label, Func<string> getValue, Action<string> setValue, string tooltip)
+    private void AddVariableDropdown(string label, Func<string> getValue, Action<string> setValue, string tooltip, VisualElement container = null, StoryVariableType? typeFilter = null, bool allowClear = false)
     {
-        extensionContainer.Add(CreateVariableDropdown(label, getValue, setValue, tooltip));
+        VisualElement parent = container ?? extensionContainer;
+        parent.Add(CreateVariableDropdown(label, getValue, setValue, tooltip, typeFilter, allowClear));
     }
 
-    private VisualElement CreateVariableDropdown(string label, Func<string> getValue, Action<string> setValue, string tooltip)
+    private VisualElement CreateVariableDropdown(string label, Func<string> getValue, Action<string> setValue, string tooltip, StoryVariableType? typeFilter = null, bool allowClear = false)
     {
         const string unset = "(未選択)";
 
@@ -2568,9 +3542,15 @@ public class StoryNodeUI : Node
 
         void OpenPopup()
         {
-            List<string> choices = StoryVariableCatalog.Collect(this);
+            List<string> choices = typeFilter.HasValue
+                ? StoryVariableCatalog.Collect(this, typeFilter)
+                : StoryVariableCatalog.Collect(this);
             string current = getValue() ?? "";
             string desired = string.IsNullOrEmpty(current) ? unset : current;
+            if (allowClear && !choices.Contains(unset))
+            {
+                choices.Insert(0, unset);
+            }
             if (!choices.Contains(desired))
             {
                 choices.Insert(0, desired);
@@ -2597,7 +3577,20 @@ public class StoryNodeUI : Node
                 if (index < 0 || index >= snapshot.Count) return;
 
                 string picked = snapshot[index];
-                if (string.IsNullOrEmpty(picked) || picked == unset) return;
+                if (string.IsNullOrEmpty(picked) || picked == unset)
+                {
+                    if (!allowClear || string.IsNullOrEmpty(getValue()))
+                    {
+                        RefreshLabel();
+                        return;
+                    }
+
+                    RecordNodeUndo();
+                    setValue("");
+                    UnityEditor.EditorUtility.SetDirty(data);
+                    RefreshLabel();
+                    return;
+                }
                 if (picked == (getValue() ?? ""))
                 {
                     RefreshLabel();
@@ -2648,6 +3641,40 @@ public class StoryNodeUI : Node
         extensionContainer.Add(matchField);
 
         VisualElement list = new VisualElement();
+        Label fillResult = new Label
+        {
+            style =
+            {
+                whiteSpace = WhiteSpace.Normal,
+                color = new StyleColor(new Color(0.85f, 0.85f, 0.85f)),
+                display = DisplayStyle.None,
+                marginTop = 4,
+                marginBottom = 4
+            }
+        };
+        Button fillButton = new Button(() =>
+        {
+            FillConditionMultiMissingLabels(node, out int filled, out int skipped);
+            if (filled == 0 && skipped == 0)
+            {
+                fillResult.text = "欠損のラベルはありません。";
+            }
+            else
+            {
+                fillResult.text = filled + " 件を補完しました。";
+                if (skipped > 0)
+                    fillResult.text += skipped + " 件は Label が無いため、そのままです。";
+            }
+
+            fillResult.style.display = DisplayStyle.Flex;
+            RedrawConditionMultiList(node, list);
+        })
+        {
+            text = "欠損ラベルを補完",
+            tooltip = "再生記録のラベルが欠損の行へ、その StoryGraph で最初に登場する Label を入れます。未選択は変えません。"
+        };
+        extensionContainer.Add(fillButton);
+        extensionContainer.Add(fillResult);
         extensionContainer.Add(list);
         RedrawConditionMultiList(node, list);
 
@@ -2664,6 +3691,64 @@ public class StoryNodeUI : Node
             text = "＋ 条件を追加"
         };
         extensionContainer.Add(addButton);
+    }
+
+    private void FillConditionMultiMissingLabels(ConditionMultiNode node, out int filled, out int skipped)
+    {
+        filled = 0;
+        skipped = 0;
+        if (node?.conditions == null) return;
+
+        Dictionary<StoryGraph, string> firstLabel = new Dictionary<StoryGraph, string>();
+        bool changed = false;
+        for (int i = 0; i < node.conditions.Count; i++)
+        {
+            ConditionMultiEntry entry = node.conditions[i];
+            if (entry == null || entry.source != ConditionMultiSource.Visit) continue;
+            if (entry.visitGraph == null || string.IsNullOrEmpty(entry.visitLabelGuid)) continue;
+            if (entry.visitGraph.FindLabel(entry.visitLabelGuid) != null) continue;
+
+            if (!firstLabel.TryGetValue(entry.visitGraph, out string labelGuid))
+            {
+                labelGuid = FindFirstLabelGuid(entry.visitGraph);
+                firstLabel.Add(entry.visitGraph, labelGuid);
+            }
+
+            if (string.IsNullOrEmpty(labelGuid))
+            {
+                skipped++;
+                continue;
+            }
+
+            if (!changed)
+            {
+                BeginGraphEdit("欠損ラベルを補完");
+                RecordNodeUndo("欠損ラベルを補完");
+                changed = true;
+            }
+
+            entry.visitLabelGuid = labelGuid;
+            filled++;
+        }
+
+        if (!changed) return;
+        UnityEditor.EditorUtility.SetDirty(node);
+        EndGraphEdit();
+    }
+
+    /// <summary>
+    /// グラフのノード順で、最初に登場する Label の GUID。
+    /// </summary>
+    private static string FindFirstLabelGuid(StoryGraph graph)
+    {
+        if (graph == null || graph.nodes == null) return null;
+        for (int i = 0; i < graph.nodes.Count; i++)
+        {
+            if (graph.nodes[i] is LabelNode label && !string.IsNullOrEmpty(label.guid))
+                return label.guid;
+        }
+
+        return null;
     }
 
     private void RedrawConditionMultiList(ConditionMultiNode node, VisualElement container)
@@ -3080,6 +4165,17 @@ public class StoryNodeUI : Node
         }
 
         if (string.IsNullOrEmpty(selectedGuid)) return;
+
+        if (StoryVisitButtonEntry.IsStartTarget(selectedGuid))
+        {
+            options.Insert(1, new LabelOption
+            {
+                display = StoryVisitButtonEntry.StartTarget,
+                labelGuid = selectedGuid,
+                graph = selectedGraph
+            });
+            return;
+        }
 
         for (int i = 1; i < options.Count; i++)
         {
